@@ -397,7 +397,7 @@ def test_deck_build_auto_detects_markdown_bullets_and_preserves_text_opt_out(
                         "layout": "1-title-and-content",
                         "content": {
                             "title": "Bullets",
-                            "content_1": "- First point\n  - Nested point\nPlain paragraph",
+                            "content_1": "- First point\n  - Nested point\n\nPlain paragraph",
                         },
                     },
                     {
@@ -441,6 +441,140 @@ def test_deck_build_auto_detects_markdown_bullets_and_preserves_text_opt_out(
 
     literal_shape = _placeholder_by_idx(generated.slides[1], 1)
     assert literal_shape.text_frame.paragraphs[0].text == "- literal dash"
+
+
+def test_deck_build_parses_markdown_inline_formatting_and_ordered_lists(
+    template_path: Path,
+    manifest_dir: Path,
+    tmp_path: Path,
+) -> None:
+    deck_spec = tmp_path / "markdown-rich.yaml"
+    out_file = tmp_path / "markdown-rich.pptx"
+    _init_manifest(template_path, manifest_dir)
+
+    deck_spec.write_text(
+        yaml.safe_dump(
+            {
+                "slides": [
+                    {
+                        "layout": "1-title-and-content",
+                        "content": {
+                            "title": "Markdown rich",
+                            "content_1": {
+                                "kind": "markdown-text",
+                                "value": (
+                                    "# Heading\n\n"
+                                    "Some **bold** and *italic* text.\n\n"
+                                    "1. First item\n"
+                                    "2. Second item"
+                                ),
+                            },
+                        },
+                    }
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    payload = _invoke_json(
+        [
+            "deck",
+            "build",
+            "--manifest",
+            str(manifest_dir),
+            "--spec",
+            str(deck_spec),
+            "--out",
+            str(out_file),
+        ]
+    )
+
+    assert payload["result"]["summary"]["slides"] == 1
+
+    generated = Presentation(str(out_file))
+    content_shape = _placeholder_by_idx(generated.slides[0], 1)
+    paragraphs = content_shape.text_frame.paragraphs
+    assert [paragraph.text for paragraph in paragraphs] == [
+        "Heading",
+        "Some bold and italic text.",
+        "1. First item",
+        "2. Second item",
+    ]
+
+    rich_runs = paragraphs[1].runs
+    assert [run.text for run in rich_runs] == ["Some ", "bold", " and ", "italic", " text."]
+    assert rich_runs[1].font.bold is True
+    assert rich_runs[3].font.italic is True
+
+
+def test_deck_build_applies_markdown_spacing_and_heading_emphasis(
+    template_path: Path,
+    manifest_dir: Path,
+    tmp_path: Path,
+) -> None:
+    deck_spec = tmp_path / "markdown-spacing.yaml"
+    out_file = tmp_path / "markdown-spacing.pptx"
+    _init_manifest(template_path, manifest_dir)
+
+    deck_spec.write_text(
+        yaml.safe_dump(
+            {
+                "slides": [
+                    {
+                        "layout": "1-title-and-content",
+                        "content": {
+                            "title": "Markdown spacing",
+                            "content_1": {
+                                "kind": "markdown-text",
+                                "value": (
+                                    "# Heading\n\n"
+                                    "Paragraph body.\n\n"
+                                    "- Bullet one\n"
+                                    "- Bullet two\n\n"
+                                    "Body after list."
+                                ),
+                            },
+                        },
+                    }
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    payload = _invoke_json(
+        [
+            "deck",
+            "build",
+            "--manifest",
+            str(manifest_dir),
+            "--spec",
+            str(deck_spec),
+            "--out",
+            str(out_file),
+        ]
+    )
+
+    assert payload["result"]["summary"]["slides"] == 1
+
+    generated = Presentation(str(out_file))
+    content_shape = _placeholder_by_idx(generated.slides[0], 1)
+    paragraphs = content_shape.text_frame.paragraphs
+
+    assert paragraphs[0].runs[0].font.bold is True
+    assert paragraphs[0].space_after is not None
+    assert round(paragraphs[0].space_after.pt, 1) == 12.0
+    assert paragraphs[1].space_after is not None
+    assert round(paragraphs[1].space_after.pt, 1) == 6.0
+    assert paragraphs[2].space_before is not None
+    assert round(paragraphs[2].space_before.pt, 1) == 6.0
+    assert paragraphs[2].space_after is not None
+    assert round(paragraphs[2].space_after.pt, 1) == 2.0
+    assert paragraphs[4].space_before is not None
+    assert round(paragraphs[4].space_before.pt, 1) == 6.0
 
 
 def test_annotations_can_override_supported_content_types(

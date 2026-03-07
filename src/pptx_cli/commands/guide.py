@@ -194,7 +194,8 @@ def build_guide_document() -> GuideDocument:
             },
             "markdown-text": {
                 "description": (
-                    "Markdown files passed as @file.md are normalized into plain text lines."
+                    "Markdown is parsed with markdown-it-py and mapped to paragraphs, list"
+                    " levels, and basic inline emphasis."
                 ),
                 "example": {"kind": "markdown-text", "value": "# Heading\n- Point one"},
             },

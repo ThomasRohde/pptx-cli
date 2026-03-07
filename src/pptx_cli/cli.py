@@ -28,7 +28,11 @@ from pptx_cli.core.validation import ValidationError
 from pptx_cli.models.envelope import CliMessage, Envelope, Metrics
 
 app = typer.Typer(
-    help="Template-bound PowerPoint generation for enterprise decks.",
+    help=(
+        "Template-bound PowerPoint generation for enterprise decks. Supports text, "
+        "images, tables, charts, and markdown-text content in template-approved "
+        "placeholders."
+    ),
     no_args_is_help=True,
 )
 layouts_app = typer.Typer(help="Inspect approved layouts from a manifest package.")
@@ -36,7 +40,9 @@ placeholders_app = typer.Typer(help="Inspect placeholders for a layout contract.
 theme_app = typer.Typer(help="Inspect extracted theme metadata.")
 assets_app = typer.Typer(help="Inspect extracted asset references.")
 slide_app = typer.Typer(help="Create slides from approved layouts.")
-deck_app = typer.Typer(help="Build full decks from structured specs.")
+deck_app = typer.Typer(
+    help="Build full decks from structured specs, including markdown-text content."
+)
 manifest_app = typer.Typer(help="Work with manifest packages and schemas.")
 wrapper_app = typer.Typer(help="Generate thin template-specific wrapper CLIs.")
 
@@ -326,14 +332,21 @@ def slide_create_command(
         list[str] | None,
         typer.Option(
             "--set",
-            help="Placeholder assignment like key=value or key=@file",
+            help=(
+                "Placeholder assignment like key=value, key=@file, or key=@notes.md "
+                "for markdown-text."
+            ),
         ),
     ] = None,
     dry_run: DryRunOption = False,
     overwrite: OverwriteOption = False,
     format: FormatOption = None,
 ) -> None:
-    """Create a deck containing a single slide from an approved layout."""
+    """Create a deck containing a single slide from an approved layout.
+
+    Use --set key=@notes.md or a multiline markdown-looking value to populate
+    markdown-text placeholders with headings, lists, and inline emphasis.
+    """
 
     execute(
         "slide.create",
@@ -352,13 +365,26 @@ def slide_create_command(
 @deck_app.command("build")
 def deck_build_command(
     manifest: ManifestOption,
-    spec: Annotated[Path, typer.Option("--spec", help="Path to the YAML or JSON deck spec")],
+    spec: Annotated[
+        Path,
+        typer.Option(
+            "--spec",
+            help=(
+                "Path to the YAML or JSON deck spec. Use kind: markdown-text or multiline "
+                "markdown strings for rich text content."
+            ),
+        ),
+    ],
     out: Annotated[Path, typer.Option("--out", help="Output .pptx file")],
     dry_run: DryRunOption = False,
     overwrite: OverwriteOption = False,
     format: FormatOption = None,
 ) -> None:
-    """Build a deck from a structured spec."""
+    """Build a deck from a structured spec.
+
+    Deck specs can provide markdown-text content explicitly or rely on multiline
+    markdown-looking strings for headings, lists, and inline emphasis.
+    """
 
     execute(
         "deck.build",

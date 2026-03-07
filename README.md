@@ -232,6 +232,13 @@ corp-template/
 - chart
 - markdown-text
 
+`markdown-text` is parsed with `markdown-it-py` and currently maps CommonMark blocks into
+PowerPoint paragraphs. Headings become plain paragraphs, bullet lists use native PowerPoint
+bullet levels, ordered lists render as numbered paragraph text, and basic inline emphasis such
+as bold/italic/code spans is preserved where PowerPoint run formatting can express it. Markdown
+blocks also receive light presentation-aware spacing so headings, paragraphs, and lists do not
+collapse into a dense wall of text.
+
 ## Structured content objects
 
 `pptx slide create --set picture=@diagram.png` automatically normalizes the file into an
