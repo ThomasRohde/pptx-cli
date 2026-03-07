@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>pptx-cli Guardrails Explorer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #1a1a2e; --surface: #16213e; --surface2: #0f3460;
+    --border: #2a3a5e; --text: #e0e0e0; --text-dim: #8899aa;
+    --accent: #e94560; --accent2: #0ea5e9; --accent3: #22c55e;
+    --must: #e94560; --should: #f59e0b;
+    --packaging: #8b5cf6; --cli-contract: #0ea5e9; --data-integrity: #22c55e;
+    --composition: #f59e0b; --safety: #e94560; --testing: #ec4899;
+    --modularity: #06b6d4;
+  }
+  body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  header { padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+  header h1 { font-size: 16px; font-weight: 600; white-space: nowrap; }
+  header .stats { font-size: 12px; color: var(--text-dim); display: flex; gap: 12px; }
+  header .stats span { display: flex; align-items: center; gap: 4px; }
+  .main { display: flex; flex: 1; overflow: hidden; }
+  .sidebar { width: 320px; background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; flex-shrink: 0; }
+  .sidebar section { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .sidebar h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); margin-bottom: 8px; }
+  .filter-group { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  .filter-btn { padding: 4px 10px; border-radius: 12px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); font-size: 11px; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 4px; }
+  .filter-btn:hover { border-color: var(--text-dim); }
+  .filter-btn.active { border-color: var(--accent2); color: var(--text); background: rgba(14,165,233,0.15); }
+  .filter-btn .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .filter-btn .count { font-size: 10px; opacity: 0.7; }
+  .severity-btn.active[data-sev="must"] { border-color: var(--must); background: rgba(233,69,96,0.15); }
+  .severity-btn.active[data-sev="should"] { border-color: var(--should); background: rgba(245,158,11,0.15); }
+  .guardrail-list { display: flex; flex-direction: column; gap: 2px; }
+  .guardrail-item { padding: 8px 10px; border-radius: 6px; cursor: pointer; transition: background 0.15s; display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.4; }
+  .guardrail-item:hover { background: rgba(255,255,255,0.05); }
+  .guardrail-item.selected { background: rgba(14,165,233,0.15); }
+  .guardrail-item.dimmed { opacity: 0.25; }
+  .guardrail-item .sev-dot { width: 6px; height: 6px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+  .guardrail-item .sev-dot.must { background: var(--must); }
+  .guardrail-item .sev-dot.should { background: var(--should); }
+  .guardrail-item .scope-tag { font-size: 9px; padding: 1px 5px; border-radius: 3px; flex-shrink: 0; margin-top: 2px; }
+  .canvas-area { flex: 1; position: relative; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .tooltip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; max-width: 340px; font-size: 12px; line-height: 1.5; box-shadow: 0 8px 32px rgba(0,0,0,0.4); z-index: 10; display: none; }
+  .tooltip .tt-title { font-weight: 600; margin-bottom: 4px; }
+  .tooltip .tt-sev { font-size: 10px; padding: 2px 6px; border-radius: 3px; display: inline-block; margin-bottom: 6px; }
+  .tooltip .tt-sev.must { background: rgba(233,69,96,0.2); color: var(--must); }
+  .tooltip .tt-sev.should { background: rgba(245,158,11,0.2); color: var(--should); }
+  .tooltip .tt-links { margin-top: 6px; font-size: 11px; color: var(--text-dim); }
+  .tooltip .tt-links div { margin-top: 2px; }
+  .legend { position: absolute; bottom: 12px; left: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-size: 10px; display: flex; gap: 16px; z-index: 5; }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-line { width: 20px; height: 2px; }
+  .view-controls { position: absolute; top: 12px; right: 12px; display: flex; gap: 4px; z-index: 5; }
+  .view-btn { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text-dim); font-size: 11px; cursor: pointer; }
+  .view-btn:hover { border-color: var(--text-dim); color: var(--text); }
+  .view-btn.active { border-color: var(--accent2); color: var(--text); background: rgba(14,165,233,0.1); }
+  .prompt-bar { background: var(--surface); border-top: 1px solid var(--border); padding: 10px 20px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .prompt-bar .prompt-text { flex: 1; font-family: 'SF Mono', 'Cascadia Code', monospace; font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .copy-btn { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--accent2); background: transparent; color: var(--accent2); font-size: 11px; cursor: pointer; white-space: nowrap; }
+  .copy-btn:hover { background: rgba(14,165,233,0.15); }
+  .copy-btn.copied { border-color: var(--accent3); color: var(--accent3); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>pptx-cli Guardrails</h1>
+  <div class="stats">
+    <span id="stat-visible">25 guardrails</span>
+    <span>|</span>
+    <span id="stat-must">17 must</span>
+    <span id="stat-should">8 should</span>
+    <span>|</span>
+    <span>8 links</span>
+  </div>
+</header>
+
+<div class="main">
+  <div class="sidebar">
+    <section>
+      <h3>Scope</h3>
+      <div class="filter-group" id="scope-filters"></div>
+    </section>
+    <section>
+      <h3>Severity</h3>
+      <div class="filter-group" id="severity-filters"></div>
+    </section>
+    <section>
+      <h3>Guardrails <span id="list-count" style="color:var(--text-dim)">(25)</span></h3>
+      <div class="guardrail-list" id="guardrail-list"></div>
+    </section>
+  </div>
+  <div class="canvas-area">
+    <canvas id="graph"></canvas>
+    <div class="tooltip" id="tooltip"></div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-line" style="background: var(--accent2)"></div> requires</div>
+      <div class="legend-item"><div class="legend-line" style="background: var(--accent3)"></div> supports</div>
+      <div class="legend-item"><div style="width:10px;height:10px;border-radius:50%;border:2px solid var(--must)"></div> must</div>
+      <div class="legend-item"><div style="width:10px;height:10px;border-radius:50%;border:2px solid var(--should)"></div> should</div>
+    </div>
+    <div class="view-controls">
+      <button class="view-btn active" data-view="graph" onclick="setView('graph')">Graph</button>
+      <button class="view-btn" data-view="matrix" onclick="setView('matrix')">Matrix</button>
+      <button class="view-btn" onclick="autoLayout()">Re-layout</button>
+      <button class="view-btn" onclick="resetZoom()">Reset Zoom</button>
+    </div>
+  </div>
+</div>
+
+<div class="prompt-bar">
+  <div class="prompt-text" id="prompt-text">Select a guardrail to see details, or filter by scope/severity.</div>
+  <button class="copy-btn" id="copy-btn" onclick="copyPrompt()">Copy</button>
+</div>
+
+<script>
+const SCOPES = {
+  'packaging':      { color: '#8b5cf6', count: 4 },
+  'cli-contract':   { color: '#0ea5e9', count: 7 },
+  'data-integrity': { color: '#22c55e', count: 2 },
+  'composition':    { color: '#f59e0b', count: 3 },
+  'safety':         { color: '#e94560', count: 3 },
+  'testing':        { color: '#ec4899', count: 1 },
+  'modularity':     { color: '#06b6d4', count: 5 }
+};
+
+const GUARDRAILS = [
+  { num: 1,  id: 'G1',  title: 'The Python import package must be named pptx_cli, never pptx', severity: 'must', scope: 'packaging' },
+  { num: 2,  id: 'G2',  title: 'The public CLI executable name must remain pptx', severity: 'must', scope: 'packaging' },
+  { num: 3,  id: 'G3',  title: 'Every command must return a single structured JSON envelope in machine-readable mode', severity: 'must', scope: 'cli-contract' },
+  { num: 4,  id: 'G4',  title: 'Error codes must be stable, prefixed by category, and never renamed or removed', severity: 'must', scope: 'cli-contract' },
+  { num: 5,  id: 'G5',  title: 'Exit codes must use distinct numeric ranges per error category', severity: 'must', scope: 'cli-contract' },
+  { num: 6,  id: 'G6',  title: 'Manifest extracted facts and human annotations must be stored in separate files', severity: 'must', scope: 'data-integrity' },
+  { num: 7,  id: 'G7',  title: 'Mutating commands must support --dry-run with structured change summaries', severity: 'must', scope: 'safety' },
+  { num: 8,  id: 'G8',  title: 'stdout must be reserved for structured data in machine-readable mode', severity: 'must', scope: 'cli-contract' },
+  { num: 9,  id: 'G9',  title: 'File writes must use safe atomic-write semantics', severity: 'must', scope: 'safety' },
+  { num: 10, id: 'G10', title: 'Input .pptx, YAML, and JSON files must be treated as untrusted', severity: 'must', scope: 'safety' },
+  { num: 11, id: 'G11', title: 'Command modules must be thin orchestrators that delegate to core/', severity: 'should', scope: 'modularity' },
+  { num: 12, id: 'G12', title: 'Shared contracts must use typed Pydantic models, not ad hoc dictionaries', severity: 'should', scope: 'modularity' },
+  { num: 13, id: 'G13', title: 'Composition must clone approved template structures, not recreate them from styling rules', severity: 'must', scope: 'composition' },
+  { num: 14, id: 'G14', title: 'Only approved layouts and declared placeholders may be used during composition', severity: 'must', scope: 'composition' },
+  { num: 15, id: 'G15', title: 'CLI command names and envelope fields must not change without synchronized doc and test updates', severity: 'must', scope: 'cli-contract' },
+  { num: 16, id: 'G16', title: 'The guide command must expose a complete machine-readable CLI schema', severity: 'must', scope: 'cli-contract' },
+  { num: 17, id: 'G17', title: 'Given identical inputs, output must be deterministic and reproducible', severity: 'should', scope: 'data-integrity' },
+  { num: 18, id: 'G18', title: 'New behavior must ship with tests covering happy path and failure path', severity: 'must', scope: 'testing' },
+  { num: 19, id: 'G19', title: 'The PyPI distribution name must remain pptx-cli', severity: 'should', scope: 'packaging' },
+  { num: 20, id: 'G20', title: 'The tool must never silently degrade template fidelity', severity: 'must', scope: 'composition' },
+  { num: 21, id: 'G21', title: 'Wrapper generation must remain thin and delegate to the shared engine', severity: 'should', scope: 'modularity' },
+  { num: 22, id: 'G22', title: 'Package version must have a single source of truth', severity: 'should', scope: 'packaging' },
+  { num: 23, id: 'G23', title: 'Manifest schema semantics must not change without an explicit migration path', severity: 'must', scope: 'cli-contract' },
+  { num: 24, id: 'G24', title: 'When implementation details are unclear, prefer TODOs over speculative product decisions', severity: 'should', scope: 'modularity' },
+  { num: 25, id: 'G25', title: 'cli.py must own only routing, envelope emission, and exit-code mapping', severity: 'should', scope: 'modularity' }
+];
+
+const LINKS = [
+  { from: 'G1',  to: 'G2',  rel: 'supports', note: 'Package name pptx_cli supports CLI name pptx by avoiding namespace collision' },
+  { from: 'G3',  to: 'G4',  rel: 'requires', note: 'Structured envelope requires stable error codes for the errors array' },
+  { from: 'G3',  to: 'G5',  rel: 'requires', note: 'Structured envelope requires stable exit codes for process-level signaling' },
+  { from: 'G7',  to: 'G20', rel: 'supports', note: 'Dry-run preview supports the no-silent-degradation principle' },
+  { from: 'G9',  to: 'G20', rel: 'supports', note: 'Atomic writes prevent silent data corruption that would degrade fidelity' },
+  { from: 'G13', to: 'G14', rel: 'requires', note: 'Cloning template structures requires that only approved layouts and placeholders are used' },
+  { from: 'G15', to: 'G18', rel: 'requires', note: 'Synchronized doc and test updates require that new behavior ships with tests' },
+  { from: 'G11', to: 'G25', rel: 'supports', note: 'Thin command modules support the cli.py boundary by keeping logic out of both' }
+];
+
+// State
+const state = {
+  activeScopes: new Set(Object.keys(SCOPES)),
+  activeSeverities: new Set(['must', 'should']),
+  selectedGuardrail: null,
+  hoveredNode: null,
+  view: 'graph',
+  nodes: [],
+  pan: { x: 0, y: 0 },
+  zoom: 1,
+  dragging: null,
+  panning: false,
+  panStart: { x: 0, y: 0 },
+  lastMouse: { x: 0, y: 0 }
+};
+
+// Init nodes with positions
+function initNodes() {
+  const canvas = document.getElementById('graph');
+  const W = canvas.width;
+  const H = canvas.height;
+  const scopeList = Object.keys(SCOPES);
+  const scopeGroups = {};
+  GUARDRAILS.forEach(g => {
+    if (!scopeGroups[g.scope]) scopeGroups[g.scope] = [];
+    scopeGroups[g.scope].push(g);
+  });
+  const cx = W / 2, cy = H / 2;
+  const radius = Math.min(W, H) * 0.32;
+  state.nodes = GUARDRAILS.map(g => {
+    const si = scopeList.indexOf(g.scope);
+    const group = scopeGroups[g.scope];
+    const gi = group.indexOf(g);
+    const baseAngle = (si / scopeList.length) * Math.PI * 2 - Math.PI / 2;
+    const spread = 0.35;
+    const angle = baseAngle + (gi - (group.length - 1) / 2) * spread * (1 / Math.max(group.length, 1));
+    const r = radius + (gi % 2 === 0 ? 0 : 40);
+    return {
+      ...g,
+      x: cx + Math.cos(angle) * r,
+      y: cy + Math.sin(angle) * r,
+      r: g.severity === 'must' ? 20 : 16
+    };
+  });
+}
+
+function isVisible(g) {
+  return state.activeScopes.has(g.scope) && state.activeSeverities.has(g.severity);
+}
+
+// Render scope filters
+function renderFilters() {
+  const scopeDiv = document.getElementById('scope-filters');
+  scopeDiv.innerHTML = '';
+  for (const [scope, info] of Object.entries(SCOPES)) {
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn' + (state.activeScopes.has(scope) ? ' active' : '');
+    btn.innerHTML = `<span class="dot" style="background:${info.color}"></span>${scope} <span class="count">${info.count}</span>`;
+    btn.onclick = () => {
+      if (state.activeScopes.has(scope)) state.activeScopes.delete(scope);
+      else state.activeScopes.add(scope);
+      updateAll();
+    };
+    scopeDiv.appendChild(btn);
+  }
+  const sevDiv = document.getElementById('severity-filters');
+  sevDiv.innerHTML = '';
+  ['must', 'should'].forEach(sev => {
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn severity-btn' + (state.activeSeverities.has(sev) ? ' active' : '');
+    btn.dataset.sev = sev;
+    const count = GUARDRAILS.filter(g => g.severity === sev).length;
+    btn.innerHTML = `${sev} <span class="count">${count}</span>`;
+    btn.onclick = () => {
+      if (state.activeSeverities.has(sev)) state.activeSeverities.delete(sev);
+      else state.activeSeverities.add(sev);
+      updateAll();
+    };
+    sevDiv.appendChild(btn);
+  });
+}
+
+function renderList() {
+  const list = document.getElementById('guardrail-list');
+  list.innerHTML = '';
+  const visible = GUARDRAILS.filter(isVisible);
+  document.getElementById('list-count').textContent = `(${visible.length})`;
+  GUARDRAILS.forEach(g => {
+    const vis = isVisible(g);
+    const div = document.createElement('div');
+    div.className = 'guardrail-item' + (state.selectedGuardrail === g.id ? ' selected' : '') + (!vis ? ' dimmed' : '');
+    const scopeColor = SCOPES[g.scope].color;
+    div.innerHTML = `<span class="sev-dot ${g.severity}"></span><span style="flex:1">${g.id}: ${g.title}</span><span class="scope-tag" style="background:${scopeColor}22;color:${scopeColor}">${g.scope}</span>`;
+    div.onclick = () => {
+      state.selectedGuardrail = state.selectedGuardrail === g.id ? null : g.id;
+      updateAll();
+    };
+    list.appendChild(div);
+  });
+  const visCount = visible.length;
+  const mustCount = visible.filter(g => g.severity === 'must').length;
+  const shouldCount = visible.filter(g => g.severity === 'should').length;
+  document.getElementById('stat-visible').textContent = `${visCount} guardrails`;
+  document.getElementById('stat-must').textContent = `${mustCount} must`;
+  document.getElementById('stat-should').textContent = `${shouldCount} should`;
+}
+
+// Canvas rendering
+function resizeCanvas() {
+  const canvas = document.getElementById('graph');
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width * devicePixelRatio;
+  canvas.height = rect.height * devicePixelRatio;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+}
+
+function drawGraph() {
+  const canvas = document.getElementById('graph');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+  const cW = W / devicePixelRatio, cH = H / devicePixelRatio;
+  ctx.translate(state.pan.x, state.pan.y);
+  ctx.scale(state.zoom, state.zoom);
+
+  const selectedNode = state.nodes.find(n => n.id === state.selectedGuardrail);
+  const connectedIds = new Set();
+  if (selectedNode) {
+    LINKS.forEach(l => {
+      if (l.from === selectedNode.id) connectedIds.add(l.to);
+      if (l.to === selectedNode.id) connectedIds.add(l.from);
+    });
+    connectedIds.add(selectedNode.id);
+  }
+
+  // Draw scope cluster backgrounds
+  const scopeList = Object.keys(SCOPES);
+  scopeList.forEach(scope => {
+    const scopeNodes = state.nodes.filter(n => n.scope === scope && isVisible(n));
+    if (scopeNodes.length === 0) return;
+    const cx = scopeNodes.reduce((s, n) => s + n.x, 0) / scopeNodes.length;
+    const cy = scopeNodes.reduce((s, n) => s + n.y, 0) / scopeNodes.length;
+    let maxDist = 0;
+    scopeNodes.forEach(n => {
+      const d = Math.hypot(n.x - cx, n.y - cy);
+      if (d > maxDist) maxDist = d;
+    });
+    const r = maxDist + 50;
+    ctx.fillStyle = SCOPES[scope].color + '08';
+    ctx.strokeStyle = SCOPES[scope].color + '20';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = SCOPES[scope].color + '60';
+    ctx.font = '10px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText(scope, cx, cy - r + 14);
+  });
+
+  // Draw links
+  LINKS.forEach(link => {
+    const from = state.nodes.find(n => n.id === link.from);
+    const to = state.nodes.find(n => n.id === link.to);
+    if (!from || !to) return;
+    const fromVis = isVisible(from);
+    const toVis = isVisible(to);
+    if (!fromVis && !toVis) return;
+
+    const isHighlighted = selectedNode && (link.from === selectedNode.id || link.to === selectedNode.id);
+    const alpha = selectedNode ? (isHighlighted ? 1 : 0.1) : (fromVis && toVis ? 0.6 : 0.15);
+    const color = link.rel === 'requires' ? '#0ea5e9' : '#22c55e';
+
+    ctx.strokeStyle = color + (alpha < 0.2 ? '30' : alpha < 0.7 ? '99' : 'dd');
+    ctx.lineWidth = isHighlighted ? 2.5 : 1.5;
+
+    // Draw curved line
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const dist = Math.hypot(dx, dy);
+    const mx = (from.x + to.x) / 2, my = (from.y + to.y) / 2;
+    const nx = -dy / dist * 20, ny = dx / dist * 20;
+    const cpx = mx + nx, cpy = my + ny;
+
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.quadraticCurveTo(cpx, cpy, to.x, to.y);
+    ctx.stroke();
+
+    // Arrowhead
+    const t = 0.85;
+    const ax = (1-t)*(1-t)*from.x + 2*(1-t)*t*cpx + t*t*to.x;
+    const ay = (1-t)*(1-t)*from.y + 2*(1-t)*t*cpy + t*t*to.y;
+    const adx = to.x - ax, ady = to.y - ay;
+    const al = Math.hypot(adx, ady);
+    const angle = Math.atan2(ady, adx);
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.beginPath();
+    ctx.moveTo(ax + Math.cos(angle) * 8, ay + Math.sin(angle) * 8);
+    ctx.lineTo(ax + Math.cos(angle + 2.5) * 8, ay + Math.sin(angle + 2.5) * 8);
+    ctx.lineTo(ax + Math.cos(angle - 2.5) * 8, ay + Math.sin(angle - 2.5) * 8);
+    ctx.closePath();
+    ctx.fill();
+
+    // Link label
+    if (isHighlighted) {
+      ctx.fillStyle = color + 'cc';
+      ctx.font = '9px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText(link.rel, cpx, cpy - 6);
+    }
+  });
+
+  // Draw nodes
+  state.nodes.forEach(node => {
+    const vis = isVisible(node);
+    const isSelected = node.id === state.selectedGuardrail;
+    const isConnected = connectedIds.has(node.id);
+    const isHovered = node.id === state.hoveredNode;
+    let alpha = 1;
+    if (!vis) alpha = 0.1;
+    else if (selectedNode && !isSelected && !isConnected) alpha = 0.2;
+
+    const scopeColor = SCOPES[node.scope].color;
+    const sevColor = node.severity === 'must' ? '#e94560' : '#f59e0b';
+    const r = node.r;
+
+    // Glow for selected
+    if (isSelected) {
+      ctx.shadowColor = scopeColor;
+      ctx.shadowBlur = 16;
+    }
+
+    // Fill
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = scopeColor + '30';
+    ctx.strokeStyle = scopeColor;
+    ctx.lineWidth = isSelected ? 3 : isHovered ? 2.5 : 1.5;
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Severity ring
+    ctx.strokeStyle = sevColor;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, r + 4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Label
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(node.id, node.x, node.y);
+
+    ctx.globalAlpha = 1;
+  });
+
+  ctx.restore();
+}
+
+function drawMatrix() {
+  const canvas = document.getElementById('graph');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+  const cW = W / devicePixelRatio, cH = H / devicePixelRatio;
+
+  const visible = GUARDRAILS.filter(isVisible);
+  if (visible.length === 0) { ctx.restore(); return; }
+
+  const cellSize = Math.min(28, (Math.min(cW, cH) - 160) / visible.length);
+  const startX = 130, startY = 130;
+
+  // Headers
+  ctx.font = '9px system-ui';
+  ctx.textBaseline = 'middle';
+  visible.forEach((g, i) => {
+    const x = startX + i * cellSize + cellSize / 2;
+    ctx.save();
+    ctx.translate(x, startY - 8);
+    ctx.rotate(-Math.PI / 4);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = SCOPES[g.scope].color;
+    ctx.fillText(g.id, 0, 0);
+    ctx.restore();
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = SCOPES[g.scope].color;
+    ctx.fillText(g.id, startX - 8, startY + i * cellSize + cellSize / 2);
+  });
+
+  // Grid
+  visible.forEach((row, ri) => {
+    visible.forEach((col, ci) => {
+      const x = startX + ci * cellSize;
+      const y = startY + ri * cellSize;
+      ctx.strokeStyle = '#2a3a5e40';
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(x, y, cellSize, cellSize);
+
+      const link = LINKS.find(l => l.from === row.id && l.to === col.id);
+      if (link) {
+        const color = link.rel === 'requires' ? '#0ea5e9' : '#22c55e';
+        ctx.fillStyle = color + '60';
+        ctx.fillRect(x + 2, y + 2, cellSize - 4, cellSize - 4);
+        ctx.fillStyle = color;
+        ctx.font = 'bold 8px system-ui';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(link.rel === 'requires' ? 'R' : 'S', x + cellSize / 2, y + cellSize / 2);
+      }
+
+      if (ri === ci) {
+        ctx.fillStyle = SCOPES[row.scope].color + '20';
+        ctx.fillRect(x + 1, y + 1, cellSize - 2, cellSize - 2);
+      }
+    });
+  });
+
+  // Legend
+  ctx.font = '10px system-ui';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#0ea5e9';
+  ctx.fillText('R = requires', startX, startY + visible.length * cellSize + 24);
+  ctx.fillStyle = '#22c55e';
+  ctx.fillText('S = supports', startX + 100, startY + visible.length * cellSize + 24);
+  ctx.fillStyle = '#8899aa';
+  ctx.fillText('Row \u2192 Col (from \u2192 to)', startX + 200, startY + visible.length * cellSize + 24);
+
+  ctx.restore();
+}
+
+function render() {
+  if (state.view === 'graph') drawGraph();
+  else drawMatrix();
+}
+
+function updatePrompt() {
+  const el = document.getElementById('prompt-text');
+  const visible = GUARDRAILS.filter(isVisible);
+  const sel = state.selectedGuardrail ? GUARDRAILS.find(g => g.id === state.selectedGuardrail) : null;
+
+  if (sel) {
+    const links = LINKS.filter(l => l.from === sel.id || l.to === sel.id);
+    let text = `Guardrail ${sel.id} [${sel.severity}] (${sel.scope}): ${sel.title}`;
+    if (links.length > 0) {
+      text += ' | Links: ' + links.map(l => {
+        const other = l.from === sel.id ? l.to : l.from;
+        const dir = l.from === sel.id ? `${sel.id} ${l.rel} ${other}` : `${other} ${l.rel} ${sel.id}`;
+        return `${dir} (${l.note})`;
+      }).join('; ');
+    }
+    el.textContent = text;
+  } else if (visible.length < 25) {
+    const scopes = [...state.activeScopes].join(', ');
+    const sevs = [...state.activeSeverities].join(', ');
+    el.textContent = `Showing ${visible.length} guardrails | Scopes: ${scopes} | Severity: ${sevs} | ${visible.map(g => g.id).join(', ')}`;
+  } else {
+    el.textContent = 'All 25 pptx-cli guardrails: 17 must, 8 should across 7 scopes (packaging, cli-contract, data-integrity, composition, safety, testing, modularity) with 8 relationship links.';
+  }
+}
+
+function copyPrompt() {
+  const text = document.getElementById('prompt-text').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+  });
+}
+
+function setView(v) {
+  state.view = v;
+  document.querySelectorAll('.view-btn[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+  render();
+}
+
+function autoLayout() {
+  const canvas = document.getElementById('graph');
+  const W = canvas.width / devicePixelRatio;
+  const H = canvas.height / devicePixelRatio;
+  const visible = state.nodes.filter(isVisible);
+  if (visible.length === 0) return;
+
+  // Force-directed layout
+  for (let iter = 0; iter < 200; iter++) {
+    const damp = 0.95 - iter * 0.002;
+    // Repulsion
+    for (let i = 0; i < visible.length; i++) {
+      for (let j = i + 1; j < visible.length; j++) {
+        let dx = visible[j].x - visible[i].x;
+        let dy = visible[j].y - visible[i].y;
+        let dist = Math.max(Math.hypot(dx, dy), 1);
+        let force = 8000 / (dist * dist);
+        let fx = dx / dist * force;
+        let fy = dy / dist * force;
+        visible[i].x -= fx * damp;
+        visible[i].y -= fy * damp;
+        visible[j].x += fx * damp;
+        visible[j].y += fy * damp;
+      }
+    }
+    // Attraction along edges
+    LINKS.forEach(l => {
+      const a = visible.find(n => n.id === l.from);
+      const b = visible.find(n => n.id === l.to);
+      if (!a || !b) return;
+      let dx = b.x - a.x;
+      let dy = b.y - a.y;
+      let dist = Math.hypot(dx, dy);
+      let force = (dist - 120) * 0.01;
+      let fx = dx / dist * force;
+      let fy = dy / dist * force;
+      a.x += fx * damp;
+      a.y += fy * damp;
+      b.x -= fx * damp;
+      b.y -= fy * damp;
+    });
+    // Scope clustering
+    const scopeList = Object.keys(SCOPES);
+    scopeList.forEach(scope => {
+      const group = visible.filter(n => n.scope === scope);
+      if (group.length < 2) return;
+      const cx = group.reduce((s, n) => s + n.x, 0) / group.length;
+      const cy = group.reduce((s, n) => s + n.y, 0) / group.length;
+      group.forEach(n => {
+        n.x += (cx - n.x) * 0.03 * damp;
+        n.y += (cy - n.y) * 0.03 * damp;
+      });
+    });
+    // Center gravity
+    visible.forEach(n => {
+      n.x += (W / 2 - n.x) * 0.005;
+      n.y += (H / 2 - n.y) * 0.005;
+    });
+  }
+  // Clamp
+  visible.forEach(n => {
+    n.x = Math.max(40, Math.min(W - 40, n.x));
+    n.y = Math.max(40, Math.min(H - 40, n.y));
+  });
+  render();
+}
+
+function resetZoom() {
+  state.pan = { x: 0, y: 0 };
+  state.zoom = 1;
+  render();
+}
+
+function updateAll() {
+  renderFilters();
+  renderList();
+  render();
+  updatePrompt();
+}
+
+// Canvas interaction
+function canvasCoords(e) {
+  const canvas = document.getElementById('graph');
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left - state.pan.x) / state.zoom;
+  const y = (e.clientY - rect.top - state.pan.y) / state.zoom;
+  return { x, y };
+}
+
+function hitTest(mx, my) {
+  for (let i = state.nodes.length - 1; i >= 0; i--) {
+    const n = state.nodes[i];
+    if (!isVisible(n)) continue;
+    if (Math.hypot(mx - n.x, my - n.y) < n.r + 4) return n;
+  }
+  return null;
+}
+
+const canvas = document.getElementById('graph');
+const tooltip = document.getElementById('tooltip');
+
+canvas.addEventListener('mousedown', e => {
+  const { x, y } = canvasCoords(e);
+  const hit = hitTest(x, y);
+  if (hit && state.view === 'graph') {
+    state.dragging = hit;
+    state.dragging._ox = hit.x - x;
+    state.dragging._oy = hit.y - y;
+  } else {
+    state.panning = true;
+    state.panStart = { x: e.clientX - state.pan.x, y: e.clientY - state.pan.y };
+  }
+});
+
+canvas.addEventListener('mousemove', e => {
+  const { x, y } = canvasCoords(e);
+  state.lastMouse = { cx: e.clientX, cy: e.clientY };
+
+  if (state.dragging) {
+    state.dragging.x = x + state.dragging._ox;
+    state.dragging.y = y + state.dragging._oy;
+    render();
+    return;
+  }
+  if (state.panning) {
+    state.pan.x = e.clientX - state.panStart.x;
+    state.pan.y = e.clientY - state.panStart.y;
+    render();
+    return;
+  }
+
+  const hit = hitTest(x, y);
+  state.hoveredNode = hit ? hit.id : null;
+  canvas.style.cursor = hit ? 'grab' : 'default';
+
+  if (hit && state.view === 'graph') {
+    const links = LINKS.filter(l => l.from === hit.id || l.to === hit.id);
+    let linksHtml = '';
+    if (links.length > 0) {
+      linksHtml = `<div class="tt-links"><strong>Links:</strong>${links.map(l => {
+        const arrow = l.from === hit.id ? '\u2192' : '\u2190';
+        const other = l.from === hit.id ? l.to : l.from;
+        return `<div>${arrow} ${l.rel} ${other}: ${l.note}</div>`;
+      }).join('')}</div>`;
+    }
+    tooltip.innerHTML = `<div class="tt-title">${hit.id}: ${hit.title}</div><span class="tt-sev ${hit.severity}">${hit.severity}</span> <span style="font-size:10px;color:${SCOPES[hit.scope].color}">${hit.scope}</span>${linksHtml}`;
+    tooltip.style.display = 'block';
+    const rect = canvas.parentElement.getBoundingClientRect();
+    let tx = e.clientX - rect.left + 12;
+    let ty = e.clientY - rect.top + 12;
+    if (tx + 340 > rect.width) tx = e.clientX - rect.left - 350;
+    if (ty + 200 > rect.height) ty = e.clientY - rect.top - 200;
+    tooltip.style.left = tx + 'px';
+    tooltip.style.top = ty + 'px';
+  } else {
+    tooltip.style.display = 'none';
+  }
+  render();
+});
+
+canvas.addEventListener('mouseup', e => {
+  if (state.dragging) {
+    const { x, y } = canvasCoords(e);
+    // If barely moved, treat as click
+    if (Math.hypot(state.dragging.x - (x + state.dragging._ox), state.dragging.y - (y + state.dragging._oy)) < 3) {
+      state.selectedGuardrail = state.selectedGuardrail === state.dragging.id ? null : state.dragging.id;
+      updateAll();
+    }
+  }
+  state.dragging = null;
+  state.panning = false;
+});
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const delta = e.deltaY > 0 ? 0.9 : 1.1;
+  const newZoom = Math.max(0.3, Math.min(3, state.zoom * delta));
+  state.pan.x = mx - (mx - state.pan.x) * (newZoom / state.zoom);
+  state.pan.y = my - (my - state.pan.y) * (newZoom / state.zoom);
+  state.zoom = newZoom;
+  render();
+}, { passive: false });
+
+canvas.addEventListener('mouseleave', () => {
+  tooltip.style.display = 'none';
+  state.hoveredNode = null;
+  render();
+});
+
+// Init
+window.addEventListener('resize', () => { resizeCanvas(); render(); });
+resizeCanvas();
+initNodes();
+autoLayout();
+updateAll();
+</script>
+</body>
+</html>

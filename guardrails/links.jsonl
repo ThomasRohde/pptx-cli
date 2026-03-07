@@ -1,0 +1,8 @@
+{"from_id":"01KK3KY9YH3H0229S77HNTDE6F","to_id":"01KK3KYW53D2JJHHG8FA5SXCQS","rel_type":"supports","note":"Package name pptx_cli supports CLI name pptx by avoiding namespace collision"}
+{"from_id":"01KK3KYYTW5FMHH8M93T2M70X7","to_id":"01KK3KZ1DG7DKGX75MMPQV72AN","rel_type":"requires","note":"Structured envelope requires stable error codes for the errors array"}
+{"from_id":"01KK3KYYTW5FMHH8M93T2M70X7","to_id":"01KK3KZ5ZGJZYET0Z4AKT5MTN3","rel_type":"requires","note":"Structured envelope requires stable exit codes for process-level signaling"}
+{"from_id":"01KK3KZBRDY3QG6W3S13WBVP8F","to_id":"01KK3M03CGP97AG8JK1QN75MP9","rel_type":"supports","note":"Dry-run preview supports the no-silent-degradation principle"}
+{"from_id":"01KK3KZPZ8D3JR4N4QSJ7K55EV","to_id":"01KK3M03CGP97AG8JK1QN75MP9","rel_type":"supports","note":"Atomic writes prevent silent data corruption that would degrade fidelity"}
+{"from_id":"01KK3KZVV2NETJMNPH91BDKG68","to_id":"01KK3KZWSY8Y6995QAQCSD9GBH","rel_type":"requires","note":"Cloning template structures requires that only approved layouts and placeholders are used"}
+{"from_id":"01KK3KZXSMPK64F5RVZWHVR8R3","to_id":"01KK3M016C1ZXG5DKR6DM3SBKC","rel_type":"requires","note":"Synchronized doc and test updates require that new behavior ships with tests"}
+{"from_id":"01KK3KZSTCKBM9HW3BNCH0K9Z0","to_id":"01KK3M08N6VW7ZFH5JJTCQ9V06","rel_type":"supports","note":"Thin command modules support the cli.py boundary by keeping logic out of both"}
