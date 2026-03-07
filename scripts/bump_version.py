@@ -48,7 +48,10 @@ def main() -> None:
 
     if not args.no_push:
         _run(["git", "push", "--follow-tags"], cwd=repo_root)
-        print(f"Pushed {tag} — publish workflow will run automatically.")
+        print(
+            f"Pushed {tag}. The publish workflow runs automatically when the version "
+            "change reaches main/master."
+        )
     else:
         print(f"Tagged {tag} locally. Push with: git push --follow-tags")
 
