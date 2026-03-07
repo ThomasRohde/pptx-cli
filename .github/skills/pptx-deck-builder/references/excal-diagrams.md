@@ -18,7 +18,7 @@ excal validate diagram.excalidraw --check-assets
 ### excal render <file|->
 Render to SVG, PNG, or PDF. PNG/PDF require Playwright.
 ```bash
-excal render diagram.excalidraw --outDir ./out --png --scale 2 --no-background
+excal render diagram.excalidraw --outDir ./out --png --scale 4 --no-background
 excal render diagram.excalidraw --outDir ./out --svg
 excal render diagram.excalidraw --outDir ./out --png --dark-mode
 excal render diagram.excalidraw --outDir ./out --png --frame "Frame Name"
@@ -31,7 +31,7 @@ Flags:
 - `--pdf` — Export PDF (requires Playwright)
 - `--dark-mode` — Dark theme
 - `--no-background` — Transparent background
-- `--scale <n>` — Scale factor for PNG (default: 2)
+- `--scale <n>` — Scale factor for PNG (default: 2, use 4 for slide-quality output)
 - `--padding <n>` — Padding in pixels (default: 20)
 - `--frame <id|name>` — Export specific frame only
 - `--element <id>` — Export specific element only

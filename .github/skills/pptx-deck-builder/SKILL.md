@@ -112,11 +112,14 @@ letterboxing.
 ```bash
 # Create the .excalidraw file, then:
 excal validate diagrams/my-diagram.excalidraw
-excal render diagrams/my-diagram.excalidraw --outDir ./out/diagrams --png --scale 2 --no-background
+excal render diagrams/my-diagram.excalidraw --outDir ./out/diagrams --png --scale 4 --no-background
 ```
 
 Use `--no-background` for transparent backgrounds that blend with slide
-backgrounds. Use `--scale 2` for crisp output.
+backgrounds. Use `--scale 4` for crisp output — scale 2 looks blurry on
+large slide placeholders because the pixel density is too low for the
+physical size. Scale 4 ensures diagrams stay sharp even on high-DPI
+displays and when projected.
 
 **Match the template's visual identity.** Diagrams should feel like they belong
 on the slide, not like foreign objects pasted in. Two things matter most:
@@ -285,7 +288,7 @@ Match content to the right layout:
 | Content type | Suggested layout patterns |
 |---|---|
 | Opening / title | front-page layouts (with pattern or picture) |
-| Agenda / TOC | agenda layouts |
+| Agenda / TOC | agenda layouts (use plain text items without numbered prefixes — the layout often auto-numbers) |
 | Section divider | breaker layouts |
 | Single topic with bullets | title-and-content |
 | Side-by-side comparison | two-contents |
@@ -323,7 +326,7 @@ pptx validate --manifest ./manifest-dir --deck deck.pptx --strict --format json
 
 # Diagrams
 excal validate diagram.excalidraw
-excal render diagram.excalidraw --outDir ./out --png --scale 2 --no-background
+excal render diagram.excalidraw --outDir ./out --png --scale 4 --no-background
 
 # Template versioning
 pptx manifest diff ./v1-manifest ./v2-manifest --format json
