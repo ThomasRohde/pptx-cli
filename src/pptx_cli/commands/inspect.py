@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pptx_cli.core.manifest_store import load_annotations, load_manifest
+from pptx_cli.core.manifest_store import load_effective_manifest, load_manifest
 from pptx_cli.core.validation import ValidationError
 
 
@@ -15,9 +15,7 @@ def doctor(manifest_dir: Path) -> dict[str, Any]:
 
 
 def list_layouts(manifest_dir: Path) -> dict[str, Any]:
-    manifest = load_manifest(manifest_dir)
-    annotations = load_annotations(manifest_dir)
-    annotations_by_layout = {item.layout_id: item for item in annotations.layouts}
+    manifest = load_effective_manifest(manifest_dir)
     return {
         "manifest": str(manifest_dir),
         "count": len(manifest.layouts),
@@ -25,11 +23,7 @@ def list_layouts(manifest_dir: Path) -> dict[str, Any]:
             {
                 "id": layout.id,
                 "name": layout.name,
-                "aliases": (
-                    annotations_by_layout[layout.id].aliases
-                    if layout.id in annotations_by_layout
-                    else []
-                ),
+                "aliases": layout.aliases,
                 "description": layout.description,
                 "preview_path": layout.preview_path,
                 "placeholder_count": len(layout.placeholders),
@@ -41,9 +35,13 @@ def list_layouts(manifest_dir: Path) -> dict[str, Any]:
 
 
 def show_layout(manifest_dir: Path, layout_id: str) -> dict[str, Any]:
-    manifest = load_manifest(manifest_dir)
+    manifest = load_effective_manifest(manifest_dir)
     layout = next(
-        (item for item in manifest.layouts if item.id == layout_id or item.name == layout_id),
+        (
+            item
+            for item in manifest.layouts
+            if item.id == layout_id or item.name == layout_id or layout_id in item.aliases
+        ),
         None,
     )
     if layout is None:
@@ -52,9 +50,13 @@ def show_layout(manifest_dir: Path, layout_id: str) -> dict[str, Any]:
 
 
 def list_placeholders(manifest_dir: Path, layout_id: str) -> dict[str, Any]:
-    manifest = load_manifest(manifest_dir)
+    manifest = load_effective_manifest(manifest_dir)
     layout = next(
-        (item for item in manifest.layouts if item.id == layout_id or item.name == layout_id),
+        (
+            item
+            for item in manifest.layouts
+            if item.id == layout_id or item.name == layout_id or layout_id in item.aliases
+        ),
         None,
     )
     if layout is None:

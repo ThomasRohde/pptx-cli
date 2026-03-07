@@ -132,6 +132,16 @@ pptx deck build \
   --dry-run
 ```
 
+Replace an existing output file explicitly:
+
+```bash
+pptx deck build \
+  --manifest ./corp-template \
+  --spec ./deck.yaml \
+  --out ./out/operating-model.pptx \
+  --overwrite
+```
+
 ## Example deck spec
 
 ```yaml
@@ -203,7 +213,7 @@ corp-template/
 
 - `manifest.yaml` — extracted source-of-truth contract
 - `manifest.schema.json` — schema for validation and tooling
-- `annotations.yaml` — human-authored semantic annotations layered over extracted facts
+- `annotations.yaml` — human-authored semantic annotations and placeholder overrides layered over extracted facts
 - `reports/init-report.json` — warnings, unsupported features, and compatibility findings
 - `fingerprints/parts.json` — structural fingerprints used for validation and diffing
 
@@ -215,7 +225,51 @@ corp-template/
 - image
 - table
 - chart
-- markdown-to-text
+- markdown-text
+
+## Structured content objects
+
+`pptx slide create --set picture=@diagram.png` automatically normalizes the file into an
+image payload. In deck specs, use the equivalent structured object explicitly:
+
+```yaml
+slides:
+  - layout: 3-front-page-title-and-picture
+    content:
+      title: Workflow
+      picture:
+        kind: image
+        path: out/diagrams/workflow.png
+        image_fit: fit
+```
+
+`image_fit` defaults to `fit`, which preserves the whole image inside the placeholder.
+Use `cover` to opt back into crop-to-fill behavior.
+
+Tables and charts use the same `kind` pattern:
+
+```yaml
+slides:
+  - layout: 1-title-and-content
+    content:
+      title: Status by workstream
+      content_1:
+        kind: table
+        columns: [Workstream, Status]
+        rows:
+          - [Platform, Active]
+          - [Sales, Planned]
+  - layout: 1-title-and-content
+    content:
+      title: Quarterly trend
+      content_1:
+        kind: chart
+        chart_type: column_clustered
+        categories: [Q1, Q2, Q3]
+        series:
+          - name: Revenue
+            values: [12, 15, 18]
+```
 
 ### Fidelity model
 

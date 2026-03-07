@@ -7,6 +7,7 @@ from typing import Annotated, Any
 import typer
 import yaml
 
+from pptx_cli import __version__
 from pptx_cli.commands.compose import deck_build, slide_create
 from pptx_cli.commands.guide import build_guide_document
 from pptx_cli.commands.init import run_init
@@ -26,7 +27,10 @@ from pptx_cli.core.runtime import build_runtime_context, stdout_is_tty
 from pptx_cli.core.validation import ValidationError
 from pptx_cli.models.envelope import CliMessage, Envelope, Metrics
 
-app = typer.Typer(help="Template-bound PowerPoint generation for enterprise decks.")
+app = typer.Typer(
+    help="Template-bound PowerPoint generation for enterprise decks.",
+    no_args_is_help=True,
+)
 layouts_app = typer.Typer(help="Inspect approved layouts from a manifest package.")
 placeholders_app = typer.Typer(help="Inspect placeholders for a layout contract.")
 theme_app = typer.Typer(help="Inspect extracted theme metadata.")
@@ -52,6 +56,14 @@ FormatOption = Annotated[
 DryRunOption = Annotated[
     bool,
     typer.Option("--dry-run", help="Preview changes without writing files."),
+]
+OverwriteOption = Annotated[
+    bool,
+    typer.Option(
+        "--overwrite",
+        "--force",
+        help="Allow replacing an existing output file.",
+    ),
 ]
 ManifestOption = Annotated[
     Path,
@@ -169,13 +181,45 @@ def execute(command: str, format: str | None, func: Any) -> None:
     resolved_format = resolve_output_format(runtime, format)
     try:
         result = func()
+    except typer.Exit:
+        raise
     except CompositionError as exc:
         fail(command, runtime, resolved_format, exc.code, str(exc))
     except ValidationError as exc:
         fail(command, runtime, resolved_format, exc.code, str(exc))
+    except FileNotFoundError as exc:
+        fail(command, runtime, resolved_format, "ERR_IO_NOT_FOUND", str(exc))
+    except PermissionError as exc:
+        fail(command, runtime, resolved_format, "ERR_IO_WRITE", str(exc))
+    except OSError as exc:
+        fail(command, runtime, resolved_format, "ERR_IO_WRITE", str(exc))
     except ValueError as exc:
         fail(command, runtime, resolved_format, "ERR_VALIDATION_INPUT", str(exc))
+    except Exception as exc:
+        fail(command, runtime, resolved_format, "ERR_INTERNAL_UNHANDLED", str(exc))
     success(command, runtime, resolved_format, result)
+
+
+def _version_callback(value: bool) -> None:
+    if not value:
+        return
+    typer.echo(__version__)
+    raise typer.Exit()
+
+
+@app.callback()
+def app_callback(
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            callback=_version_callback,
+            is_eager=True,
+            help="Show the installed version and exit.",
+        ),
+    ] = False,
+) -> None:
+    """pptx CLI."""
 
 
 @app.command("guide")
@@ -218,6 +262,8 @@ def init_command(
         result = run_init(template, out, dry_run=dry_run)
     except OSError as exc:
         fail("template.init", runtime, resolved_format, "ERR_IO_WRITE", str(exc))
+    except Exception as exc:
+        fail("template.init", runtime, resolved_format, "ERR_INTERNAL_UNHANDLED", str(exc))
     success("template.init", runtime, resolved_format, result)
 
 
@@ -284,6 +330,7 @@ def slide_create_command(
         ),
     ] = None,
     dry_run: DryRunOption = False,
+    overwrite: OverwriteOption = False,
     format: FormatOption = None,
 ) -> None:
     """Create a deck containing a single slide from an approved layout."""
@@ -297,6 +344,7 @@ def slide_create_command(
             list(set_values or []),
             out,
             dry_run=dry_run,
+            overwrite=overwrite,
         ),
     )
 
@@ -307,11 +355,22 @@ def deck_build_command(
     spec: Annotated[Path, typer.Option("--spec", help="Path to the YAML or JSON deck spec")],
     out: Annotated[Path, typer.Option("--out", help="Output .pptx file")],
     dry_run: DryRunOption = False,
+    overwrite: OverwriteOption = False,
     format: FormatOption = None,
 ) -> None:
     """Build a deck from a structured spec."""
 
-    execute("deck.build", format, lambda: deck_build(manifest, spec, out, dry_run=dry_run))
+    execute(
+        "deck.build",
+        format,
+        lambda: deck_build(
+            manifest,
+            spec,
+            out,
+            dry_run=dry_run,
+            overwrite=overwrite,
+        ),
+    )
 
 
 @app.command("validate")

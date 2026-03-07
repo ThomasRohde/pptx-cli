@@ -69,7 +69,11 @@ def build_guide_document() -> GuideDocument:
                 input_schema=DeckSpec.model_json_schema(),
                 examples=[
                     "pptx slide create --manifest ./corp-template --layout title-only "
-                    "--set title=Hello --out ./out/slide.pptx --dry-run"
+                    "--set title=Hello --out ./out/slide.pptx --dry-run",
+                    "pptx slide create --manifest ./corp-template "
+                    "--layout 3-front-page-title-and-picture "
+                    "--set title=Workflow --set picture=@out/workflow.png "
+                    "--out ./out/workflow-slide.pptx --overwrite",
                 ],
             ),
             GuideCommand(
@@ -79,7 +83,9 @@ def build_guide_document() -> GuideDocument:
                 input_schema=DeckSpec.model_json_schema(),
                 examples=[
                     "pptx deck build --manifest ./corp-template --spec deck.yaml "
-                    "--out ./out/deck.pptx --dry-run"
+                    "--out ./out/deck.pptx --dry-run",
+                    "pptx deck build --manifest ./corp-template --spec deck.yaml "
+                    "--out ./out/deck.pptx --overwrite",
                 ],
             ),
             GuideCommand(
@@ -128,9 +134,12 @@ def build_guide_document() -> GuideDocument:
             "ERR_VALIDATION_PLACEHOLDER_UNKNOWN": {"exit_code": 10, "retryable": False},
             "ERR_VALIDATION_PLACEHOLDER_REQUIRED": {"exit_code": 10, "retryable": False},
             "ERR_VALIDATION_CONTENT_TYPE": {"exit_code": 10, "retryable": False},
+            "ERR_VALIDATION_IMAGE_FIT": {"exit_code": 10, "retryable": False},
             "ERR_IO_NOT_FOUND": {"exit_code": 50, "retryable": False},
+            "ERR_IO_WRITE": {"exit_code": 50, "retryable": True},
             "ERR_CONFLICT_OUTPUT_EXISTS": {"exit_code": 40, "retryable": False},
             "ERR_INTERNAL_PLACEHOLDER_MISSING": {"exit_code": 90, "retryable": False},
+            "ERR_INTERNAL_UNHANDLED": {"exit_code": 90, "retryable": False},
         },
         identifier_conventions={
             "command_ids": (
@@ -153,5 +162,41 @@ def build_guide_document() -> GuideDocument:
                 "Run guide, layouts, theme, assets, and doctor commands in parallel",
                 "Run deck.build and validate sequentially against the same output file",
             ],
+        },
+        content_objects={
+            "image": {
+                "description": (
+                    "Use structured image content in deck specs. image_fit defaults to 'fit' "
+                    "and accepts 'fit' or 'cover'."
+                ),
+                "example": {
+                    "kind": "image",
+                    "path": "out/diagrams/workflow.png",
+                    "image_fit": "fit",
+                },
+            },
+            "table": {
+                "description": "Populate a table placeholder or object placeholder from rows.",
+                "example": {
+                    "kind": "table",
+                    "columns": ["Owner", "Status"],
+                    "rows": [["Platform", "Active"], ["Sales", "Planned"]],
+                },
+            },
+            "chart": {
+                "description": "Populate a chart placeholder or object placeholder from data.",
+                "example": {
+                    "kind": "chart",
+                    "chart_type": "column_clustered",
+                    "categories": ["Q1", "Q2", "Q3"],
+                    "series": [{"name": "Revenue", "values": [12, 15, 18]}],
+                },
+            },
+            "markdown-text": {
+                "description": (
+                    "Markdown files passed as @file.md are normalized into plain text lines."
+                ),
+                "example": {"kind": "markdown-text", "value": "# Heading\n- Point one"},
+            },
         },
     )

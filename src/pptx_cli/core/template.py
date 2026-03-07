@@ -66,9 +66,21 @@ def _supports_content_types(placeholder_type: str, shape_name: str) -> list[str]
     lower_name = shape_name.lower()
     if "logo" in lower_name or "progress bar" in lower_name:
         return []
-    if placeholder_type in {"pic", "bitmap", "media_clip", "org_chart", "clip_art"}:
+    if placeholder_type in {
+        "pic",
+        "picture",
+        "bitmap",
+        "media_clip",
+        "org_chart",
+        "clip_art",
+        "slide_image",
+    }:
         return ["image"]
-    if placeholder_type in {"body", "obj", "content", "text"}:
+    if placeholder_type == "chart":
+        return ["chart"]
+    if placeholder_type == "table":
+        return ["table"]
+    if placeholder_type in {"body", "object", "content", "text"}:
         return ["text", "markdown-text", "image", "table", "chart"]
     return ["text", "markdown-text"]
 
@@ -187,11 +199,18 @@ def _extract_theme(zip_file: zipfile.ZipFile) -> ThemeModel:
 
     fonts: dict[str, str] = {}
     if font_scheme is not None:
-        latin_nodes = font_scheme.xpath(".//a:latin", namespaces=_DRAWINGML_NS)
-        for index, node in enumerate(latin_nodes, start=1):
-            typeface = node.get("typeface")
-            if typeface:
-                fonts[f"latin_{index}"] = typeface
+        major_latin = font_scheme.find("./a:majorFont/a:latin", namespaces=_DRAWINGML_NS)
+        minor_latin = font_scheme.find("./a:minorFont/a:latin", namespaces=_DRAWINGML_NS)
+        major_typeface = major_latin.get("typeface") if major_latin is not None else None
+        minor_typeface = minor_latin.get("typeface") if minor_latin is not None else None
+        if major_typeface:
+            fonts["major"] = major_typeface
+            fonts["major_latin"] = major_typeface
+            fonts["latin_1"] = major_typeface
+        if minor_typeface:
+            fonts["minor"] = minor_typeface
+            fonts["minor_latin"] = minor_typeface
+            fonts["latin_2"] = minor_typeface
 
     return ThemeModel(name=theme_name, colors=colors, fonts=fonts, effects={})
 
@@ -525,6 +544,7 @@ def build_manifest_package(
                 "chart",
                 "markdown-text",
             ],
+            "default_image_fit": "fit",
             "safe_writes": True,
         },
         capabilities={

@@ -48,3 +48,4 @@ class GuideDocument(BaseModel):
     error_codes: dict[str, dict[str, Any]] = Field(default_factory=dict)
     identifier_conventions: dict[str, str] = Field(default_factory=dict)
     concurrency: dict[str, Any] = Field(default_factory=dict)
+    content_objects: dict[str, dict[str, Any]] = Field(default_factory=dict)

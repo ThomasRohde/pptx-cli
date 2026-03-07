@@ -120,6 +120,12 @@ class LayoutAnnotation(BaseModel):
     aliases: list[str] = Field(default_factory=list)
     semantic_tags: list[str] = Field(default_factory=list)
     usage_notes: str | None = None
+    placeholder_overrides: list[PlaceholderAnnotation] = Field(default_factory=list)
+
+
+class PlaceholderAnnotation(BaseModel):
+    logical_name: str
+    supported_content_types: list[str] | None = None
 
 
 class TemplateAnnotations(BaseModel):

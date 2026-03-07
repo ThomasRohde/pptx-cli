@@ -9,6 +9,10 @@ from typing import Any
 from pptx import Presentation
 from pptx.chart.data import ChartData
 from pptx.enum.chart import XL_CHART_TYPE
+from pptx.oxml.shapes.graphfrm import CT_GraphicalObjectFrame
+from pptx.oxml.shapes.picture import CT_Picture
+from pptx.shapes.placeholder import PlaceholderGraphicFrame, PlaceholderPicture
+from pptx.util import Emu
 
 from pptx_cli.core.io import load_json_or_yaml
 from pptx_cli.core.manifest_store import template_copy_path
@@ -21,6 +25,29 @@ class CompositionError(ValueError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
+
+
+_IMAGE_FIT_ALIASES = {
+    "contain": "fit",
+    "cover": "cover",
+    "crop": "cover",
+    "fill": "cover",
+    "fit": "fit",
+}
+
+
+def plan_output_change(output_path: Path, *, overwrite: bool) -> dict[str, str]:
+    if output_path.exists() and not overwrite:
+        raise CompositionError(
+            "ERR_CONFLICT_OUTPUT_EXISTS",
+            f"Output already exists: {output_path}. Use --overwrite to replace it.",
+        )
+    operation = "replace" if output_path.exists() else "create"
+    return {
+        "target": str(output_path),
+        "operation": operation,
+        "artifact_type": "pptx",
+    }
 
 
 def resolve_layout(manifest: ManifestDocument, layout_id: str) -> LayoutContract:
@@ -84,19 +111,34 @@ def build_presentation(manifest_dir: Path, manifest: ManifestDocument, spec: Dec
     return prs
 
 
-def save_presentation(prs: Any, output_path: Path) -> None:
+def save_presentation(prs: Any, output_path: Path, *, overwrite: bool) -> None:
+    if output_path.exists() and not overwrite:
+        raise CompositionError(
+            "ERR_CONFLICT_OUTPUT_EXISTS",
+            f"Output already exists: {output_path}. Use --overwrite to replace it.",
+        )
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        delete=False,
-        suffix=output_path.suffix,
-        dir=output_path.parent,
-    ) as handle:
-        temp_path = Path(handle.name)
+    temp_path: Path | None = None
     try:
+        with tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=output_path.suffix,
+            dir=output_path.parent,
+        ) as handle:
+            temp_path = Path(handle.name)
         prs.save(str(temp_path))
         os.replace(temp_path, output_path)
+    except PermissionError as exc:
+        code = "ERR_CONFLICT_OUTPUT_EXISTS" if output_path.exists() else "ERR_IO_WRITE"
+        if code == "ERR_CONFLICT_OUTPUT_EXISTS":
+            message = f"Output file is in use or locked: {output_path}"
+        else:
+            message = f"Cannot write output file: {output_path}"
+        raise CompositionError(code, message) from exc
+    except OSError as exc:
+        raise CompositionError("ERR_IO_WRITE", f"Cannot write output file: {output_path}") from exc
     finally:
-        if temp_path.exists():
+        if temp_path is not None and temp_path.exists():
             temp_path.unlink(missing_ok=True)
 
 
@@ -169,10 +211,7 @@ def _apply_content_value(shape: Any, supported_types: list[str], value: Any) -> 
         _apply_text(shape, str(content["value"]), markdown=kind == "markdown-text")
         return
     if kind == "image":
-        image_path = Path(str(content["path"]))
-        if not image_path.exists():
-            raise CompositionError("ERR_IO_NOT_FOUND", f"Image not found: {image_path}")
-        shape.insert_picture(str(image_path))
+        _apply_image(shape, content)
         return
     if kind == "table":
         _apply_table(shape, content)
@@ -219,6 +258,17 @@ def _markdown_to_text(markdown: str) -> str:
     return "\n".join(cleaned_lines).strip()
 
 
+def _apply_image(shape: Any, content: dict[str, Any]) -> None:
+    image_path = Path(str(content["path"]))
+    if not image_path.exists():
+        raise CompositionError("ERR_IO_NOT_FOUND", f"Image not found: {image_path}")
+
+    placeholder_size = (int(shape.width), int(shape.height))
+    image_fit = _normalize_image_fit(content.get("image_fit"))
+    picture, image_size = _insert_placeholder_picture(shape, image_path)
+    _apply_image_crop(picture, image_size, placeholder_size, image_fit)
+
+
 def _apply_table(shape: Any, content: dict[str, Any]) -> None:
     columns = content.get("columns", [])
     rows = content.get("rows", [])
@@ -236,7 +286,7 @@ def _apply_table(shape: Any, content: dict[str, Any]) -> None:
             "Table payload must contain at least one row and one column",
         )
 
-    graphic_frame = shape.insert_table(row_count, col_count)
+    graphic_frame = _insert_placeholder_table(shape, row_count, col_count)
     table = graphic_frame.table
     row_offset = 0
     if columns:
@@ -277,4 +327,107 @@ def _apply_chart(shape: Any, content: dict[str, Any]) -> None:
             f"Unsupported chart_type: {chart_type_name.lower()}",
         )
     chart_type = getattr(XL_CHART_TYPE, chart_type_name)
-    shape.insert_chart(chart_type, chart_data)
+    _insert_placeholder_chart(shape, chart_type, chart_data)
+
+
+def _normalize_image_fit(value: Any) -> str:
+    if value is None:
+        return "fit"
+    if not isinstance(value, str):
+        raise CompositionError(
+            "ERR_VALIDATION_IMAGE_FIT",
+            "image_fit must be one of: fit, contain, cover, fill, crop",
+        )
+    normalized = value.strip().lower()
+    if normalized not in _IMAGE_FIT_ALIASES:
+        raise CompositionError(
+            "ERR_VALIDATION_IMAGE_FIT",
+            "image_fit must be one of: fit, contain, cover, fill, crop",
+        )
+    return _IMAGE_FIT_ALIASES[normalized]
+
+
+def _insert_placeholder_picture(
+    shape: Any,
+    image_path: Path,
+) -> tuple[PlaceholderPicture, tuple[int, int]]:
+    image_part, relationship_id = shape.part.get_or_add_image_part(str(image_path))
+    image_size = image_part._px_size
+    picture_element = CT_Picture.new_ph_pic(
+        shape.shape_id,
+        shape.name,
+        image_part.desc,
+        relationship_id,
+    )
+    shape._replace_placeholder_with(picture_element)
+    return PlaceholderPicture(picture_element, shape._parent), image_size
+
+
+def _insert_placeholder_table(shape: Any, rows: int, cols: int) -> PlaceholderGraphicFrame:
+    graphic_frame = CT_GraphicalObjectFrame.new_table_graphicFrame(
+        shape.shape_id,
+        shape.name,
+        rows,
+        cols,
+        shape.left,
+        shape.top,
+        shape.width,
+        Emu(rows * 370840),
+    )
+    shape._replace_placeholder_with(graphic_frame)
+    return PlaceholderGraphicFrame(graphic_frame, shape._parent)
+
+
+def _insert_placeholder_chart(
+    shape: Any,
+    chart_type: XL_CHART_TYPE,
+    chart_data: ChartData,
+) -> PlaceholderGraphicFrame:
+    relationship_id = shape.part.add_chart_part(chart_type, chart_data)
+    graphic_frame = CT_GraphicalObjectFrame.new_chart_graphicFrame(
+        shape.shape_id,
+        shape.name,
+        relationship_id,
+        shape.left,
+        shape.top,
+        shape.width,
+        shape.height,
+    )
+    shape._replace_placeholder_with(graphic_frame)
+    return PlaceholderGraphicFrame(graphic_frame, shape._parent)
+
+
+def _apply_image_crop(
+    picture: PlaceholderPicture,
+    image_size: tuple[int, int],
+    placeholder_size: tuple[int, int],
+    image_fit: str,
+) -> None:
+    if image_fit == "cover":
+        picture._pic.crop_to_fit(image_size, placeholder_size)
+        return
+
+    image_width, image_height = image_size
+    placeholder_width, placeholder_height = placeholder_size
+    if image_width <= 0 or image_height <= 0:
+        return
+    if placeholder_width <= 0 or placeholder_height <= 0:
+        return
+
+    picture.crop_left = 0.0
+    picture.crop_top = 0.0
+    picture.crop_right = 0.0
+    picture.crop_bottom = 0.0
+
+    view_ratio = placeholder_width / placeholder_height
+    image_ratio = image_width / image_height
+
+    if image_ratio > view_ratio:
+        padding = (image_ratio / view_ratio - 1.0) / 2.0
+        picture.crop_top = -padding
+        picture.crop_bottom = -padding
+        return
+    if image_ratio < view_ratio:
+        padding = (view_ratio / image_ratio - 1.0) / 2.0
+        picture.crop_left = -padding
+        picture.crop_right = -padding
