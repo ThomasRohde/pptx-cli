@@ -54,10 +54,11 @@ alone should tell a coherent story. See `references/mckinsey-style.md`.
 ### Step 1 — Initialize the manifest (one-time setup)
 
 Check if a manifest package already exists. If not, initialize from the
-template:
+template. Do not assume a PowerPoint template exists; ask the user for
+the actual template path when it is not already present in the workspace:
 
 ```bash
-pptx init Template.pptx --out ./corp-template --format json
+pptx init <template.pptx> --out ./corp-template --format json
 ```
 
 Then run the doctor to verify compatibility:
@@ -192,10 +193,19 @@ slides:
 
 **Content value formats:**
 - Plain string → treated as `text`
-- Multi-line YAML block scalar → treated as `text` with line breaks
+- Multi-line YAML block scalar with markdown-looking content (headings, lists,
+  ordered items) → auto-detected as `markdown-text`
+- `@notes.md` via `--set key=@notes.md` or `{ kind: "markdown-text", value:
+  "..." }` → markdown parsed with headings, lists, inline emphasis, and light
+  presentation-aware spacing
 - `{ kind: "image", path: "path/to/file.png" }` → image insertion
 - `{ kind: "table", columns: [...], rows: [[...], ...] }` → table
 - `{ kind: "chart", chart_type: "column_clustered", categories: [...], series: [{name: "...", values: [...]}] }` → chart
+
+For markdown-heavy placeholders, prefer explicit `kind: markdown-text` when you
+want unambiguous behavior. The current renderer preserves bold, italic, inline
+code, bullets, nested bullets, ordered lists, and light block spacing, but it
+does not attempt full document-layout fidelity.
 
 ### Step 5 — Build and validate
 
@@ -307,7 +317,7 @@ arrangement, background color, or description fields.
 
 ```bash
 # One-time setup
-pptx init Template.pptx --out ./manifest-dir --format json
+pptx init <template.pptx> --out ./manifest-dir --format json
 pptx doctor --manifest ./manifest-dir --format json
 
 # Inspection (safe to parallelize)
@@ -317,7 +327,7 @@ pptx theme show --manifest ./manifest-dir --format json
 pptx assets list --manifest ./manifest-dir --format json
 
 # Single slide (quick test)
-pptx slide create --manifest ./manifest-dir --layout <id> --set title="Hello" --out slide.pptx
+pptx slide create --manifest ./manifest-dir --layout <id> --set title="Hello" --set content_1=@notes.md --out slide.pptx
 
 # Full deck
 pptx deck build --manifest ./manifest-dir --spec deck.yaml --out deck.pptx --format json
