@@ -66,10 +66,6 @@ Then run the doctor to verify compatibility:
 pptx doctor --manifest ./corp-template --format json
 ```
 
-**Important:** After init, picture-type placeholders are missing `image` in
-their `supported_content_types`. Fix this before using images — see the
-image handling section below.
-
 ### Step 2 — Discover layouts and placeholders
 
 List available layouts, then inspect placeholders for the ones you plan to use:
@@ -87,7 +83,29 @@ placeholder:
 - `supported_content_types` — What it accepts (`text`, `markdown-text`,
   `image`, `table`, `chart`)
 - `required` — Whether it must be filled
-- `text_defaults` — Suggested font size, max lines
+- `estimated_text_capacity` — Preferred normalized guidance for text-capable
+  placeholders. Read `max_lines` first, then check `confidence`, `source`,
+  and `font_size_pt`.
+- `text_defaults` — Raw extracted placeholder hints such as suggested font
+  size or explicit `max_lines` from the template text
+- `left_emu`, `top_emu`, `width_emu`, `height_emu` — The actual geometry.
+  Treat `width_emu` and `height_emu` as hard constraints for how much content
+  the placeholder can realistically hold.
+
+For slide drafting, prefer `estimated_text_capacity.max_lines` over parsing
+`text_defaults.max_lines` directly. Treat it as guidance, not a hard rule:
+stay at or below the line estimate when possible, and be more conservative
+when `confidence` is `low`.
+
+Respect placeholder size in every content decision:
+
+- Text: do not write beyond the likely line budget for the box. If the message
+  does not fit, tighten the wording or choose a layout with a larger text area.
+- Images and diagrams: match the placeholder aspect ratio and expected visual
+  density to the available width and height.
+- Tables and charts: reduce rows, columns, labels, or series when the
+  placeholder is small. Prefer a larger layout over forcing dense content into
+  a small box.
 
 Also inspect theme colors and assets if you need to match the visual identity:
 
@@ -193,58 +211,28 @@ Use `--dry-run` on build to preview without writing files.
 
 ---
 
-## Image handling — known issues and fixes
-
-### Picture placeholders need `image` added to supported_content_types
-
-After `pptx init`, picture-type placeholders only list `["text",
-"markdown-text"]`. You must edit `manifest.yaml` to add `- image`:
-
-```yaml
-# Find all placeholder_type: picture entries and add image:
-    placeholder_type: picture
-    guidance_lines: []
-    supported_content_types:
-    - text
-    - markdown-text
-    - image          # ← add this line
-```
-
-Use a replace-all to fix every occurrence at once.
+## Image handling
 
 ### Image scaling — fit vs crop
 
-The default `insert_picture` behavior crops to fill, which clips content when
-aspect ratios differ. The composition code should be patched to scale images to
-fit within placeholder bounds instead. The fix in
-`pptx_cli/core/composition.py` replaces the image insertion block:
+Picture placeholders should already advertise `image` in
+`supported_content_types`. Do not patch `manifest.yaml` unless inspection
+output proves the template contract is actually wrong.
 
-```python
-# After insert_picture, reset crops and scale to fit:
-ph_left, ph_top = shape.left, shape.top
-ph_width, ph_height = shape.width, shape.height
-pic = shape.insert_picture(str(image_path))
-pic.crop_left = pic.crop_right = pic.crop_top = pic.crop_bottom = 0
-img = pic.image
-img_w, img_h = img.size
-img_aspect = img_w / img_h
-ph_aspect = ph_width / ph_height
-if img_aspect > ph_aspect:
-    new_width = ph_width
-    new_height = int(ph_width / img_aspect)
-else:
-    new_height = ph_height
-    new_width = int(ph_height * img_aspect)
-pic.left = ph_left + (ph_width - new_width) // 2
-pic.top = ph_top + (ph_height - new_height) // 2
-pic.width = new_width
-pic.height = new_height
+The current build behavior defaults to `image_fit: fit`, which preserves the
+full image inside the placeholder. Use `image_fit: cover` when you explicitly
+want crop-to-fill behavior.
+
+```yaml
+slides:
+  - layout: picture-layout-id
+    content:
+      title: Workflow
+      picture:
+        kind: image
+        path: out/diagrams/workflow.png
+        image_fit: fit
 ```
-
-Check whether this patch is already applied before applying it. Read the
-`_apply_content_value` function in `composition.py` — if it only has
-`shape.insert_picture(str(image_path))` with no scaling logic, the patch
-is needed.
 
 ---
 
@@ -264,6 +252,17 @@ conclude — not just name the topic.
 
 If a slide has two insights, split it into two slides. The body must prove
 the headline.
+
+### Respect placeholder geometry
+
+Never treat placeholder size as flexible. The template geometry is part of the
+contract.
+
+- If text exceeds the placeholder's likely capacity, shorten it or split it.
+- If a table or chart needs more room, switch to a layout with a larger object
+  placeholder.
+- If a diagram becomes unreadable at the placeholder's size, simplify the
+  diagram rather than shrinking text and shapes until they are illegible.
 
 ### Source attribution
 

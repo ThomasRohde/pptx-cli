@@ -35,6 +35,7 @@ The result is a CLI that behaves more like a compiler toolchain than a drawing t
 
 - Initialize a manifest package from a real enterprise `.pptx`
 - Inspect layouts, placeholders, themes, assets, and compatibility warnings
+- Estimate text placeholder line capacity for agent guidance during inspection
 - Build slides from approved layouts only
 - Build full decks from JSON/YAML specs
 - Preserve template-bound masters, themes, geometry, and protected elements
@@ -92,6 +93,10 @@ pptx layouts list --manifest ./corp-template
 pptx layouts show title-only --manifest ./corp-template
 pptx placeholders list 1-title-and-content --manifest ./corp-template
 ```
+
+`pptx placeholders list --format json` includes both explicit placeholder guidance and
+an `estimated_text_capacity` block for text-capable placeholders so agents can stay
+inside likely line limits when drafting slide content.
 
 Create a single slide:
 

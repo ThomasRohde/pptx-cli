@@ -164,6 +164,29 @@ def test_inspection_commands_use_manifest_contract(
     assert title_placeholder["text_defaults"]["max_lines"] == 2
     assert title_placeholder["text_defaults"]["suggested_font_size_pt"] == 24.0
     assert title_placeholder["text_defaults"]["suggested_font_family"] == "DB Regular"
+    assert title_placeholder["estimated_text_capacity"]["max_lines"] == 2
+    assert title_placeholder["estimated_text_capacity"]["source"] == "explicit_guidance"
+    assert title_placeholder["estimated_text_capacity"]["confidence"] == "high"
+    assert title_placeholder["estimated_text_capacity"]["font_size_pt"] == 24.0
+
+    subtitle_placeholder = next(
+        placeholder for placeholder in placeholders if placeholder["logical_name"] == "subtitle"
+    )
+    assert subtitle_placeholder["estimated_text_capacity"]["max_lines"] == 1
+    assert subtitle_placeholder["estimated_text_capacity"]["source"] == "inferred"
+    assert subtitle_placeholder["estimated_text_capacity"]["confidence"] == "medium"
+
+    content_layout_payload = _invoke_json(
+        ["placeholders", "list", "1-title-and-content", "--manifest", str(manifest_dir)]
+    )
+    content_placeholder = next(
+        placeholder
+        for placeholder in content_layout_payload["result"]["placeholders"]
+        if placeholder["logical_name"] == "content_1"
+    )
+    assert content_placeholder["estimated_text_capacity"]["max_lines"] == 20
+    assert content_placeholder["estimated_text_capacity"]["source"] == "inferred"
+    assert content_placeholder["estimated_text_capacity"]["font_size_pt"] == 14.0
 
     theme_payload = _invoke_json(["theme", "show", "--manifest", str(manifest_dir)])
     assert "fonts" in theme_payload["result"]
@@ -567,6 +590,10 @@ def test_deck_build_validate_schema_and_diff(
     schema_payload = _invoke_json(["manifest", "schema"])
     assert "template" in schema_payload["result"]["properties"]
     assert "$defs" in schema_payload["result"]
+    assert (
+        "estimated_text_capacity"
+        in schema_payload["result"]["$defs"]["PlaceholderContract"]["properties"]
+    )
 
     diff_payload = _invoke_json(["manifest", "diff", str(manifest_dir), str(manifest_dir)])
     assert diff_payload["result"]["breaking_changes"] == []

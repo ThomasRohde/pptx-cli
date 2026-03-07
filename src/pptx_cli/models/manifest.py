@@ -40,6 +40,16 @@ class ProtectedElement(BaseModel):
     fingerprint: str
 
 
+class TextCapacityGuidance(BaseModel):
+    max_lines: int
+    source: Literal["explicit_guidance", "inferred"] = "inferred"
+    confidence: Literal["high", "medium", "low"] = "medium"
+    font_size_pt: float | None = None
+    font_family: str | None = None
+    usable_height_pt: float | None = None
+    line_height_pt: float | None = None
+
+
 class PlaceholderContract(BaseModel):
     logical_name: str
     source_name: str
@@ -55,6 +65,7 @@ class PlaceholderContract(BaseModel):
     required: bool = False
     overflow_policy: Literal["fit", "warn", "truncate"] = "warn"
     text_defaults: dict[str, Any] = Field(default_factory=dict)
+    estimated_text_capacity: TextCapacityGuidance | None = None
     inheritance_chain: list[str] = Field(default_factory=list)
     allowed_formatting_overrides: list[str] = Field(default_factory=list)
 

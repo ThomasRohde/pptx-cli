@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 import shutil
 import zipfile
@@ -29,13 +30,18 @@ from pptx_cli.models.manifest import (
     PlaceholderContract,
     ProtectedElement,
     TemplateInfo,
+    TextCapacityGuidance,
     ThemeModel,
 )
 
 _DRAWINGML_NS = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
+_PRESENTATIONML_NS = {"p": "http://schemas.openxmlformats.org/presentationml/2006/main"}
+_PPTX_NS = {**_DRAWINGML_NS, **_PRESENTATIONML_NS}
 _PLACEHOLDER_TYPE_NAMES = {item.value: item.name.lower() for item in PP_PLACEHOLDER}
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".svg", ".tif", ".tiff"}
 _MEDIA_SUFFIXES = {".mp4", ".wmv", ".avi", ".mov", ".mp3", ".wav", ".m4v"}
+_EMU_PER_POINT = 12700
+_DEFAULT_LINE_HEIGHT_MULTIPLIER = 1.2
 _NUMBER_WORDS = {
     "one": 1,
     "two": 2,
@@ -172,6 +178,188 @@ def _extract_text_defaults(shape: Any) -> dict[str, Any]:
     return {key: value for key, value in defaults.items() if value not in (None, [], "")}
 
 
+def _emu_to_points(value: int) -> float:
+    return round(value / _EMU_PER_POINT, 2)
+
+
+def _placeholder_text_style_bucket(placeholder_type: str) -> str:
+    if placeholder_type in {"title", "center_title", "vertical_title"}:
+        return "title"
+    if placeholder_type in {"body", "object", "content", "text", "subtitle"}:
+        return "body"
+    return "other"
+
+
+def _extract_master_text_styles(master: Any) -> dict[str, dict[int, float]]:
+    styles: dict[str, dict[int, float]] = {}
+    for bucket, tag_name in {
+        "title": "titleStyle",
+        "body": "bodyStyle",
+        "other": "otherStyle",
+    }.items():
+        style_root = master.element.find(f".//p:{tag_name}", namespaces=_PPTX_NS)
+        if style_root is None:
+            styles[bucket] = {}
+            continue
+
+        level_sizes: dict[int, float] = {}
+        default_size_pt: float | None = None
+        default_paragraph = style_root.find("./a:defPPr", namespaces=_PPTX_NS)
+        if default_paragraph is not None:
+            default_run = default_paragraph.find("./a:defRPr", namespaces=_PPTX_NS)
+            default_size_pt = _font_size_from_xml(default_run)
+
+        for level in range(1, 10):
+            paragraph_style = style_root.find(f"./a:lvl{level}pPr", namespaces=_PPTX_NS)
+            if paragraph_style is None:
+                continue
+            default_run = paragraph_style.find("./a:defRPr", namespaces=_PPTX_NS)
+            font_size_pt = _font_size_from_xml(default_run)
+            if font_size_pt is not None:
+                level_sizes[level - 1] = font_size_pt
+
+        if default_size_pt is not None:
+            level_sizes.setdefault(0, default_size_pt)
+        styles[bucket] = level_sizes
+
+    return styles
+
+
+def _font_size_from_xml(element: Any) -> float | None:
+    if element is None:
+        return None
+    size = element.get("sz")
+    if size is None:
+        return None
+    try:
+        return int(size) / 100
+    except ValueError:
+        return None
+
+
+def _resolve_font_size_pt(
+    shape: Any,
+    placeholder_type: str,
+    text_defaults: dict[str, Any],
+    master_text_styles: dict[str, dict[int, float]],
+) -> tuple[float | None, str | None]:
+    suggested_size = text_defaults.get("suggested_font_size_pt")
+    if suggested_size is not None:
+        return float(suggested_size), "guidance_text"
+
+    text_frame = getattr(shape, "text_frame", None)
+    if text_frame is not None:
+        for paragraph in text_frame.paragraphs:
+            if paragraph.font.size is not None:
+                return float(paragraph.font.size.pt), "paragraph_font"
+            for run in paragraph.runs:
+                if run.font.size is not None:
+                    return float(run.font.size.pt), "run_font"
+
+    bucket = _placeholder_text_style_bucket(placeholder_type)
+    text_level = 0
+    if text_frame is not None and text_frame.paragraphs:
+        text_level = int(text_frame.paragraphs[0].level or 0)
+    bucket_styles = master_text_styles.get(bucket, {})
+    font_size_pt = bucket_styles.get(text_level)
+    if font_size_pt is not None:
+        return float(font_size_pt), "master_text_style"
+    if bucket != "other":
+        font_size_pt = master_text_styles.get("other", {}).get(text_level)
+        if font_size_pt is not None:
+            return float(font_size_pt), "master_text_style"
+    return None, None
+
+
+def _resolve_font_family(
+    shape: Any,
+    placeholder_type: str,
+    text_defaults: dict[str, Any],
+    theme: ThemeModel,
+) -> tuple[str | None, str | None]:
+    suggested_family = text_defaults.get("suggested_font_family")
+    if suggested_family is not None:
+        return str(suggested_family), "guidance_text"
+
+    text_frame = getattr(shape, "text_frame", None)
+    if text_frame is not None:
+        for paragraph in text_frame.paragraphs:
+            if paragraph.font.name:
+                return str(paragraph.font.name), "paragraph_font"
+            for run in paragraph.runs:
+                if run.font.name:
+                    return str(run.font.name), "run_font"
+
+    bucket = _placeholder_text_style_bucket(placeholder_type)
+    if bucket == "title":
+        theme_family = theme.fonts.get("major") or theme.fonts.get("major_latin")
+    else:
+        theme_family = theme.fonts.get("minor") or theme.fonts.get("minor_latin")
+    if theme_family is None:
+        theme_family = theme.fonts.get("major") or theme.fonts.get("minor")
+    if theme_family is None:
+        return None, None
+    return theme_family, "theme"
+
+
+def _estimate_text_capacity(
+    shape: Any,
+    placeholder_type: str,
+    supported_content_types: list[str],
+    text_defaults: dict[str, Any],
+    master_text_styles: dict[str, dict[int, float]],
+    theme: ThemeModel,
+) -> TextCapacityGuidance | None:
+    if "text" not in supported_content_types and "markdown-text" not in supported_content_types:
+        return None
+
+    text_frame = getattr(shape, "text_frame", None)
+    if text_frame is None:
+        return None
+
+    font_size_pt, font_size_source = _resolve_font_size_pt(
+        shape,
+        placeholder_type,
+        text_defaults,
+        master_text_styles,
+    )
+    if font_size_pt is None:
+        return None
+
+    font_family, _ = _resolve_font_family(shape, placeholder_type, text_defaults, theme)
+    margin_top = int(text_frame.margin_top or 0)
+    margin_bottom = int(text_frame.margin_bottom or 0)
+    usable_height_emu = max(int(shape.height) - margin_top - margin_bottom, 0)
+    usable_height_pt = _emu_to_points(usable_height_emu)
+    if usable_height_pt <= 0:
+        return None
+
+    line_height_pt = round(font_size_pt * _DEFAULT_LINE_HEIGHT_MULTIPLIER, 2)
+    explicit_max_lines = text_defaults.get("max_lines")
+    if explicit_max_lines is not None:
+        return TextCapacityGuidance(
+            max_lines=int(explicit_max_lines),
+            source="explicit_guidance",
+            confidence="high",
+            font_size_pt=round(font_size_pt, 2),
+            font_family=font_family,
+            usable_height_pt=usable_height_pt,
+            line_height_pt=line_height_pt,
+        )
+
+    inferred_lines = max(1, math.floor(usable_height_pt / line_height_pt))
+    confidence = "medium" if font_size_source is not None else "low"
+    return TextCapacityGuidance(
+        max_lines=inferred_lines,
+        source="inferred",
+        confidence=confidence,
+        font_size_pt=round(font_size_pt, 2),
+        font_family=font_family,
+        usable_height_pt=usable_height_pt,
+        line_height_pt=line_height_pt,
+    )
+
+
 def _extract_theme(zip_file: zipfile.ZipFile) -> ThemeModel:
     theme_candidates = [
         name
@@ -237,6 +425,7 @@ def _is_protected_placeholder(shape_name: str) -> bool:
 
 def _build_layouts(
     prs: Any,
+    theme: ThemeModel,
 ) -> tuple[list[MasterContract], list[LayoutContract], list[LayoutAnnotation]]:
     master_ids: list[MasterContract] = []
     layouts: list[LayoutContract] = []
@@ -244,9 +433,11 @@ def _build_layouts(
     layout_ids_seen: set[str] = set()
 
     master_id_map: dict[int, str] = {}
+    master_style_map: dict[int, dict[str, dict[int, float]]] = {}
     for master_index, master in enumerate(prs.slide_masters):
         master_id = f"master-{master_index + 1}"
         master_id_map[id(master)] = master_id
+        master_style_map[id(master)] = _extract_master_text_styles(master)
         master_ids.append(
             MasterContract(
                 id=master_id,
@@ -286,6 +477,15 @@ def _build_layouts(
                     logical_names_seen,
                 )
                 supported_content_types = _supports_content_types(placeholder_type, shape.name)
+                text_defaults = _extract_text_defaults(shape)
+                estimated_text_capacity = _estimate_text_capacity(
+                    shape,
+                    placeholder_type,
+                    supported_content_types,
+                    text_defaults,
+                    master_style_map.get(id(layout.slide_master), {}),
+                    theme,
+                )
                 placeholders.append(
                     PlaceholderContract(
                         logical_name=logical_name,
@@ -300,7 +500,8 @@ def _build_layouts(
                         width_emu=int(shape.width),
                         height_emu=int(shape.height),
                         required=logical_name == "title",
-                        text_defaults=_extract_text_defaults(shape),
+                        text_defaults=text_defaults,
+                        estimated_text_capacity=estimated_text_capacity,
                         inheritance_chain=[master_id, layout_id],
                     )
                 )
@@ -511,7 +712,7 @@ def build_manifest_package(
     prs = Presentation(str(template))
     with zipfile.ZipFile(template) as zip_file:
         theme = _extract_theme(zip_file)
-    masters, layouts, annotations = _build_layouts(prs)
+    masters, layouts, annotations = _build_layouts(prs, theme)
     assets = _copy_template_and_assets(template, output_dir)
     findings = _compatibility_findings(template)
     has_errors = any(item.severity == "error" for item in findings)

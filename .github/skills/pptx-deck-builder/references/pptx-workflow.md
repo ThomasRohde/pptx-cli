@@ -58,8 +58,17 @@ Key fields per placeholder:
 - `supported_content_types` — Array of: text, markdown-text, image, table, chart
 - `required` — Boolean
 - `overflow_policy` — fit, warn, or truncate
-- `text_defaults` — Object with suggested_font_size_pt, max_lines, alignment
+- `estimated_text_capacity` — Preferred agent guidance with `max_lines`,
+  `confidence`, `source`, and inferred typography metadata
+- `text_defaults` — Raw extracted placeholder hints with fields such as
+  `suggested_font_size_pt`, `max_lines`, and `alignment`
 - `left_emu`, `top_emu`, `width_emu`, `height_emu` — Position/size in EMUs
+
+Treat placeholder geometry as a hard layout constraint:
+- Text should stay within the likely line budget for the box.
+- Images and diagrams should match the placeholder aspect ratio.
+- Tables and charts should be simplified or moved to a larger layout when the
+  placeholder is too small for legible output.
 
 ### pptx theme show --manifest <dir>
 Show theme metadata: colors, fonts, effects.
