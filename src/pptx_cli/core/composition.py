@@ -129,14 +129,31 @@ def build_presentation(manifest_dir: Path, manifest: ManifestDocument, spec: Dec
     prs = Presentation(str(template_path))
     _remove_all_slides(prs)
 
-    for slide_spec in spec.slides:
-        layout_contract = resolve_layout(manifest, slide_spec.layout)
-        slide_layout = prs.slide_layouts[layout_contract.source_layout_index]
-        slide = prs.slides.add_slide(slide_layout)
-        _populate_slide(slide, layout_contract, slide_spec.content)
+    for slide_number, slide_spec in enumerate(spec.slides, start=1):
+        layout_label = slide_spec.layout
+        try:
+            layout_contract = resolve_layout(manifest, slide_spec.layout)
+            layout_label = layout_contract.id
+            slide_layout = prs.slide_layouts[layout_contract.source_layout_index]
+            slide = prs.slides.add_slide(slide_layout)
+            _populate_slide(slide, layout_contract, slide_spec.content)
+        except CompositionError as exc:
+            raise CompositionError(
+                exc.code,
+                _slide_context_message(slide_number, layout_label, str(exc)),
+            ) from exc
+        except Exception as exc:
+            raise CompositionError(
+                "ERR_INTERNAL_UNHANDLED",
+                _slide_context_message(slide_number, layout_label, str(exc)),
+            ) from exc
 
     _apply_deck_metadata(prs, spec.metadata)
     return prs
+
+
+def _slide_context_message(slide_number: int, layout_id: str, message: str) -> str:
+    return f"Slide {slide_number} ({layout_id}): {message}"
 
 
 def save_presentation(prs: Any, output_path: Path, *, overwrite: bool) -> None:
@@ -217,7 +234,15 @@ def _populate_slide(slide: Any, layout: LayoutContract, content: dict[str, Any])
                 "ERR_INTERNAL_PLACEHOLDER_MISSING",
                 f"Placeholder {key} was not found on generated slide",
             )
-        _apply_content_value(shape, placeholder.supported_content_types, value)
+        try:
+            _apply_content_value(shape, placeholder.supported_content_types, value)
+        except CompositionError as exc:
+            raise CompositionError(exc.code, f"Placeholder {key}: {exc}") from exc
+        except Exception as exc:
+            raise CompositionError(
+                "ERR_INTERNAL_UNHANDLED",
+                f"Placeholder {key}: {exc}",
+            ) from exc
         filled_placeholder_idxs.add(placeholder.placeholder_idx)
 
     _cleanup_unused_placeholders(slide, layout, filled_placeholder_idxs)
@@ -417,14 +442,22 @@ def _paragraph_style_has_bullet(paragraph_style: Any | None) -> bool:
 
 
 def _write_paragraph_runs(paragraph: Any, parsed: ParsedParagraph) -> None:
-    first_run_spec = parsed.runs[0]
-    paragraph.text = first_run_spec.text
-    _apply_run_format(paragraph.runs[0], first_run_spec)
-
-    for run_spec in parsed.runs[1:]:
+    wrote_text = False
+    for run_spec in parsed.runs:
+        if not run_spec.text:
+            continue
+        if not wrote_text:
+            paragraph.text = run_spec.text
+            if paragraph.runs:
+                _apply_run_format(paragraph.runs[0], run_spec)
+            wrote_text = True
+            continue
         run = paragraph.add_run()
         run.text = run_spec.text
         _apply_run_format(run, run_spec)
+
+    if not wrote_text:
+        paragraph.text = ""
 
 
 def _apply_run_format(run: Any, parsed: ParsedRun) -> None:

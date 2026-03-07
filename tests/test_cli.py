@@ -473,6 +473,71 @@ def test_deck_build_auto_detects_markdown_bullets_and_preserves_text_opt_out(
     assert literal_shape.text_frame.paragraphs[0].text == "- literal dash"
 
 
+def test_deck_build_preserves_blank_paragraphs_in_plain_multiline_three_column_layout(
+    template_path: Path,
+    manifest_dir: Path,
+    tmp_path: Path,
+) -> None:
+    deck_spec = tmp_path / "blank-lines-three-columns.yaml"
+    out_file = tmp_path / "blank-lines-three-columns.pptx"
+    _init_manifest(template_path, manifest_dir)
+
+    deck_spec.write_text(
+        yaml.safe_dump(
+            {
+                "slides": [
+                    {
+                        "layout": "1-2-three-contents",
+                        "content": {
+                            "title": "Plain multiline",
+                            "content_1": "First paragraph.\n\nSecond paragraph.",
+                            "content_2": "Alpha\n\nBeta",
+                            "content_3": "One\n\nTwo",
+                        },
+                    }
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    payload = _invoke_json(
+        [
+            "deck",
+            "build",
+            "--manifest",
+            str(manifest_dir),
+            "--spec",
+            str(deck_spec),
+            "--out",
+            str(out_file),
+        ]
+    )
+
+    assert payload["result"]["summary"]["slides"] == 1
+
+    generated = Presentation(str(out_file))
+    left_column = _placeholder_by_idx(generated.slides[0], 1)
+    middle_column = _placeholder_by_idx(generated.slides[0], 16)
+    right_column = _placeholder_by_idx(generated.slides[0], 17)
+    assert [paragraph.text for paragraph in left_column.text_frame.paragraphs] == [
+        "First paragraph.",
+        "",
+        "Second paragraph.",
+    ]
+    assert [paragraph.text for paragraph in middle_column.text_frame.paragraphs] == [
+        "Alpha",
+        "",
+        "Beta",
+    ]
+    assert [paragraph.text for paragraph in right_column.text_frame.paragraphs] == [
+        "One",
+        "",
+        "Two",
+    ]
+
+
 def test_deck_build_parses_markdown_inline_formatting_and_ordered_lists(
     template_path: Path,
     manifest_dir: Path,
@@ -770,6 +835,65 @@ def test_slide_create_fails_for_unknown_placeholder(
     assert result.exit_code == 10
     payload = json.loads(result.stdout)
     assert payload["errors"][0]["code"] == "ERR_VALIDATION_PLACEHOLDER_UNKNOWN"
+
+
+def test_deck_build_failure_identifies_slide_and_placeholder_context(
+    template_path: Path,
+    manifest_dir: Path,
+    tmp_path: Path,
+) -> None:
+    deck_spec = tmp_path / "missing-image.yaml"
+    out_file = tmp_path / "missing-image.pptx"
+    missing_image = tmp_path / "missing.png"
+    _init_manifest(template_path, manifest_dir)
+
+    deck_spec.write_text(
+        yaml.safe_dump(
+            {
+                "slides": [
+                    {
+                        "layout": "title-only",
+                        "content": {"title": "First slide"},
+                    },
+                    {
+                        "layout": "1-2-three-contents",
+                        "content": {
+                            "title": "Broken slide",
+                            "content_2": {
+                                "kind": "image",
+                                "path": str(missing_image),
+                            },
+                        },
+                    },
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "deck",
+            "build",
+            "--manifest",
+            str(manifest_dir),
+            "--spec",
+            str(deck_spec),
+            "--out",
+            str(out_file),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 50
+    payload = json.loads(result.stdout)
+    assert payload["errors"][0]["code"] == "ERR_IO_NOT_FOUND"
+    assert "Slide 2 (1-2-three-contents):" in payload["errors"][0]["message"]
+    assert "Placeholder content_2:" in payload["errors"][0]["message"]
+    assert "Image not found:" in payload["errors"][0]["message"]
 
 
 def test_deck_build_validate_schema_and_diff(
