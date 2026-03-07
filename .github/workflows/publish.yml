@@ -1,8 +1,9 @@
 name: Publish
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
 
 jobs:
@@ -10,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
-      contents: read
+      contents: write
     environment:
       name: pypi
     steps:
@@ -29,6 +30,8 @@ jobs:
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
 
-      - name: "TODO: verify trusted publishing configuration"
-        run: |
-          echo "TODO: configure PyPI trusted publishing for ThomasRohde/pptx-cli before enabling release publishing."
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" dist/* --generate-notes

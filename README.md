@@ -1,8 +1,7 @@
 # pptx
 
-[![CI](https://github.com/ThomasRohde/pptx-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/ThomasRohde/pptx-cli/actions/workflows/ci.yml)
-[![PyPI version](https://img.shields.io/pypi/v/pptx-cli.svg)](https://pypi.org/project/pptx-cli/)
-[![Python](https://img.shields.io/pypi/pyversions/pptx-cli.svg)](https://pypi.org/project/pptx-cli/)
+[![PyPI version](https://img.shields.io/badge/pypi-v1.0.0-blue.svg)](https://pypi.org/project/pptx-cli/)
+[![Python](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Template-bound PowerPoint generation for enterprise decks.
@@ -418,6 +417,8 @@ uv run python scripts/bump_version.py patch
 uv run python scripts/bump_version.py minor
 uv run python scripts/bump_version.py major
 ```
+
+This commits the version change, creates an annotated `v*` tag, and pushes — which triggers the publish workflow automatically. Use `--no-push` to tag locally without pushing.
 
 This updates the package version used for builds and PyPI publishing without needing to edit multiple files manually.
 

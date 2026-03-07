@@ -15,17 +15,23 @@ def ensure_directory(path: Path) -> None:
 
 def atomic_write_text(path: Path, content: str) -> None:
     ensure_directory(path.parent)
-    with tempfile.NamedTemporaryFile(
-        "w",
-        encoding="utf-8",
-        dir=path.parent,
-        delete=False,
-    ) as handle:
-        handle.write(content)
-        handle.flush()
-        os.fsync(handle.fileno())
-        temp_path = Path(handle.name)
-    os.replace(temp_path, path)
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            delete=False,
+        ) as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+            temp_path = Path(handle.name)
+        os.replace(temp_path, path)
+    except BaseException:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+        raise
 
 
 def atomic_write_bytes(path: Path, content: bytes) -> None:

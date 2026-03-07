@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-_VERSION_RE = re.compile(r'__version__\s*=\s*"(?P<version>\d+\.\d+\.\d+)"')
+_VERSION_RE = re.compile(r'__version__\s*=\s*["\'](?P<version>\d+\.\d+\.\d+)["\']')
 
 
 @dataclass(frozen=True, slots=True)

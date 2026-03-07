@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from pptx_cli.core.manifest_store import load_annotations, load_manifest
+from pptx_cli.core.validation import ValidationError
 
 
 def doctor(manifest_dir: Path) -> dict[str, Any]:
@@ -46,7 +47,7 @@ def show_layout(manifest_dir: Path, layout_id: str) -> dict[str, Any]:
         None,
     )
     if layout is None:
-        raise ValueError(f"Unknown layout: {layout_id}")
+        raise ValidationError("ERR_VALIDATION_LAYOUT_UNKNOWN", f"Unknown layout: {layout_id}")
     return layout.model_dump(mode="json")
 
 
@@ -57,7 +58,7 @@ def list_placeholders(manifest_dir: Path, layout_id: str) -> dict[str, Any]:
         None,
     )
     if layout is None:
-        raise ValueError(f"Unknown layout: {layout_id}")
+        raise ValidationError("ERR_VALIDATION_LAYOUT_UNKNOWN", f"Unknown layout: {layout_id}")
     return {
         "layout_id": layout.id,
         "layout_name": layout.name,
