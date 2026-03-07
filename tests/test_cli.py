@@ -11,6 +11,7 @@ import yaml
 from pptx import Presentation
 from typer.testing import CliRunner
 
+from pptx_cli import __version__
 from pptx_cli.cli import app
 
 runner = CliRunner()
@@ -132,7 +133,7 @@ def test_version_flag_prints_installed_version() -> None:
     result = runner.invoke(app, ["--version"])
 
     assert result.exit_code == 0
-    assert result.stdout.strip() == "1.1.0"
+    assert result.stdout.strip() == __version__
 
 
 def test_inspection_commands_use_manifest_contract(

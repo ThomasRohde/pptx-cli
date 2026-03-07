@@ -36,5 +36,6 @@ Thumbs.db
 # Generated template/manifests during local development
 *.pptx
 *.zip
+!Template.pptx
 
 
