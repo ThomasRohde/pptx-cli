@@ -49,9 +49,11 @@ Before completing a change, agents should:
 
 ## Fixture guidance
 
-- The repository currently ships a deterministic integration template at `Template.pptx` in the repository root.
-- `tests/conftest.py` exposes shared pytest fixtures so test modules can reference that template without hard-coding paths repeatedly.
-- `tests/fixtures/templates/README.md` documents the current fixture setup and where future sanitized templates should live.
+- Proprietary templates are not committed to the GitHub repository.
+- Full fixture-backed integration tests run when a local untracked `Template.pptx` is available at the repository root.
+- `tests/conftest.py` exposes shared pytest fixtures and skips proprietary-template integration tests automatically when that local fixture is missing.
+- CI sets `PPTX_SKIP_TEMPLATE_TESTS=1` and runs the public test suite only.
+- `tests/fixtures/templates/README.md` should document future sanitized fixtures if broader public integration coverage is added.
 - Future fixture expansion should add additional sanitized `.pptx` files under `tests/fixtures/templates/` when broader scenario coverage is needed.
 
 ## Suggested near-term test modules

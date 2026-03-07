@@ -30,5 +30,7 @@ jobs:
       - name: Pyright
         run: uv run pyright
 
-      - name: Pytest
+      - name: Pytest (public suite)
+        env:
+          PPTX_SKIP_TEMPLATE_TESTS: "1"
         run: uv run pytest

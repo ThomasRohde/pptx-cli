@@ -78,7 +78,9 @@ pptx guide --format json
 
 ## Quick start
 
-The repository includes a real sample template at `Template.pptx`. The examples below use that file and the layout IDs currently extracted from it.
+The examples below assume you have a local PowerPoint template file available,
+shown here as `Template.pptx`. Proprietary templates are intentionally not
+committed to the GitHub repository.
 
 Initialize a template package from an existing PowerPoint file:
 
@@ -442,13 +444,18 @@ Microsoft PowerPoint is **not required** to run the CLI.
 
 ### Sample template for local testing
 
-The repository root includes `Template.pptx`, which is currently used for:
+If you have access to a proprietary integration template, place it locally as
+an untracked `Template.pptx` in the repository root. That local fixture is used for:
 
 - CLI integration tests
 - README quick-start examples
 - local manual smoke tests while the fixture catalog grows
 
-If additional sanitized templates are introduced later, they should live under `tests/fixtures/templates/` with a short note describing their scenario coverage.
+CI does not require that file. It runs the public test suite with
+`PPTX_SKIP_TEMPLATE_TESTS=1`.
+
+If additional sanitized templates are introduced later, they should live under
+`tests/fixtures/templates/` with a short note describing their scenario coverage.
 
 Clone the repository and sync the development environment:
 
