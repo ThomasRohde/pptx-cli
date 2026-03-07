@@ -245,8 +245,16 @@ def test_slide_create_and_validate_round_trip(
     title_shape: Any = next(
         shape for shape in generated.slides[0].placeholders if shape.placeholder_format.idx == 0
     )
+    template = Presentation(str(template_path))
+    template_layout = next(
+        layout for layout in template.slide_layouts if layout.name == "Title Only"
+    )
+    template_title_shape: Any = next(
+        shape for shape in template_layout.placeholders if shape.placeholder_format.idx == 0
+    )
     first_run = title_shape.text_frame.paragraphs[0].runs[0]
     assert first_run.font.size is None
+    assert title_shape.text_frame.vertical_anchor == template_title_shape.text_frame.vertical_anchor
 
 
 def test_slide_create_picture_placeholder_uses_fit_by_default(
@@ -278,11 +286,32 @@ def test_slide_create_picture_placeholder_uses_fit_by_default(
 
     assert payload["result"]["summary"]["slides"] == 1
     generated = Presentation(str(out_file))
+    placeholder_order = [
+        shape.placeholder_format.idx
+        for shape in generated.slides[0].shapes
+        if getattr(shape, "is_placeholder", False)
+    ]
     picture_shape = _placeholder_by_idx(generated.slides[0], 14)
     assert picture_shape.crop_top < 0
     assert picture_shape.crop_bottom < 0
     assert picture_shape.crop_left == 0.0
     assert picture_shape.crop_right == 0.0
+    assert placeholder_order.index(14) < placeholder_order.index(13)
+    assert 0 not in placeholder_order
+    assert 19 not in placeholder_order
+    assert 17 in placeholder_order
+    assert 18 in placeholder_order
+
+    validation = _invoke_json(
+        [
+            "validate",
+            "--manifest",
+            str(manifest_dir),
+            "--deck",
+            str(out_file),
+        ]
+    )
+    assert validation["result"]["ok"] is True
 
 
 def test_deck_build_supports_structured_image_table_and_chart_content(
@@ -437,7 +466,8 @@ def test_deck_build_auto_detects_markdown_bullets_and_preserves_text_opt_out(
         "Nested point",
         "Plain paragraph",
     ]
-    assert paragraphs[1].level == 1
+    assert paragraphs[0].level == 1
+    assert paragraphs[1].level == 2
 
     literal_shape = _placeholder_by_idx(generated.slides[1], 1)
     assert literal_shape.text_frame.paragraphs[0].text == "- literal dash"
@@ -507,6 +537,8 @@ def test_deck_build_parses_markdown_inline_formatting_and_ordered_lists(
     assert [run.text for run in rich_runs] == ["Some ", "bold", " and ", "italic", " text."]
     assert rich_runs[1].font.bold is True
     assert rich_runs[3].font.italic is True
+    assert paragraphs[2].level == 1
+    assert paragraphs[3].level == 1
 
 
 def test_deck_build_applies_markdown_spacing_and_heading_emphasis(

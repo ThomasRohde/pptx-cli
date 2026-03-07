@@ -68,7 +68,11 @@ def validate_deck(
 
         layout = layouts_by_source_name[layout_name]
         checked_layouts.add(layout.id)
-        expected_idxs = {placeholder.placeholder_idx for placeholder in layout.placeholders}
+        expected_idxs = {
+            placeholder.placeholder_idx
+            for placeholder in layout.placeholders
+            if placeholder.required
+        }
         actual_idxs = {shape.placeholder_format.idx for shape in slide.placeholders}
         missing_idxs = sorted(expected_idxs - actual_idxs)
         if missing_idxs:
@@ -76,7 +80,7 @@ def validate_deck(
                 ValidationIssue(
                     code="ERR_VALIDATION_PLACEHOLDER_MISSING",
                     severity="error",
-                    message="Slide is missing expected placeholders for its layout",
+                    message="Slide is missing required placeholders for its layout",
                     details={
                         "slide_index": slide_index,
                         "layout_id": layout.id,

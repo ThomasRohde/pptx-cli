@@ -159,6 +159,10 @@ on the slide, not like foreign objects pasted in. Two things matter most:
    Avoid arbitrary colors — diagrams that use theme colors integrate seamlessly
    with the slide's color palette.
 
+**Keep elements away from frame edges.** Text and shapes positioned within
+10px of the frame boundary may be clipped during PNG export. Use at least a
+15px margin on all sides of the frame for safe rendering.
+
 See `references/excal-diagrams.md` for the full Excalidraw scene format and
 element types.
 
@@ -206,6 +210,11 @@ For markdown-heavy placeholders, prefer explicit `kind: markdown-text` when you
 want unambiguous behavior. The current renderer preserves bold, italic, inline
 code, bullets, nested bullets, ordered lists, and light block spacing, but it
 does not attempt full document-layout fidelity.
+
+**Section spacing in markdown content:** When a placeholder contains multiple
+sections (e.g., bold heading + bullets, then another bold heading + bullets),
+add a blank line between sections to create visual breathing room. Without it,
+consecutive sections run together with minimal spacing.
 
 ### Step 5 — Build and validate
 
@@ -296,8 +305,9 @@ Match content to the right layout:
 
 | Content type | Suggested layout patterns |
 |---|---|
-| Opening / title | front-page layouts (with pattern or picture) |
-| Agenda / TOC | agenda layouts (use plain text items without numbered prefixes — the layout often auto-numbers) |
+| Opening / title (no image) | front-page-title-and-pattern layouts |
+| Opening / title (with image) | front-page-title-and-picture layouts (see **Background image warning** below) |
+| Agenda / TOC | agenda layouts (one item per line — see **Agenda formatting** below) |
 | Section divider | breaker layouts |
 | Single topic with bullets | title-and-content |
 | Side-by-side comparison | two-contents |
@@ -310,6 +320,68 @@ When a template has numbered variants (e.g., `1-title-and-content`,
 `2-title-description-and-content`), inspect the placeholders of each to
 understand the differences. Numbered variants often differ in placeholder
 arrangement, background color, or description fields.
+
+### Background image warning — front-page-title-and-picture layouts
+
+On `front-page-title-and-picture` layouts, the picture placeholder spans
+the **full slide** and the title/subtitle render **on top of the image**.
+This means:
+
+- **Use abstract, low-detail images only** — blurred photos, gradients,
+  subtle textures, or simple geometric shapes.
+- **Never use information-dense diagrams** (with text labels, data, or
+  fine details) as the background image. The title text will collide with
+  diagram labels, making both unreadable.
+- Reserve detailed diagrams for `picture-right-text-and-box` where the
+  image sits **alongside** text, not beneath it.
+- If you must use a diagram, design it as an ambient background: large
+  shapes only, no text, muted/faded colors at low opacity.
+
+### Agenda formatting
+
+Agenda layouts expect **one item per line**, not a pipe-delimited string.
+The layout may auto-number items. Do not add numbered prefixes yourself.
+
+```yaml
+# WRONG — renders as a single cramped line
+content_1: "Foundations | Modern Patterns | Cloud-Native | Serverless"
+
+# CORRECT — each item on its own line
+content_1: |
+  Foundations
+  Modern Patterns
+  Cloud-Native
+  Serverless
+  AI-Native
+  What's Next
+```
+
+### Series 2 (white) vs Series 3 (sand) layouts
+
+When a template offers both white-background (series 2) and sand-background
+(series 3) variants of the same column layout:
+
+| Visual intent | Use |
+|---|---|
+| Standard content slides | Series 2 (white background) |
+| Highlighted or callout content | Series 3 (sand background) |
+| Visual rhythm in long decks | Alternate between series 2 and 3 per section |
+
+Do not mix white and sand variants within the same logical section — pick
+one per section and stay consistent.
+
+### Front-page variant differences
+
+Front-page layouts with the same column count may differ in subtitle
+placement. For example, variant 1 may place the subtitle **above** the
+title while variant 2 places it **below**. Always inspect placeholders
+(`top_emu` values) to understand the visual order before authoring content.
+
+### End-slide positioning
+
+End-slide layouts typically position the title left-of-center with the
+right portion of the slide empty. Keep closing titles short (1-3 words
+like "Thank you" or "Questions?") for visual balance.
 
 ---
 

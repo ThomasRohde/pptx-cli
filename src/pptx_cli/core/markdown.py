@@ -95,11 +95,10 @@ def parse_markdown_paragraphs(markdown: str) -> list[ParsedParagraph]:
             bullet_level: int | None = None
             if list_stack:
                 current_list = list_stack[-1]
+                bullet_level = min(len(list_stack) - 1, 4)
                 if current_list.ordered:
                     ordered_prefix = f"{current_list.next_index}. "
                     current_list.next_index += 1
-                else:
-                    bullet_level = min(len(list_stack) - 1, 4)
             current_item = _ListItemContext(
                 ordered_prefix=ordered_prefix,
                 bullet_level=bullet_level,

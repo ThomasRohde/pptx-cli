@@ -9,8 +9,10 @@ from typing import Any
 from pptx import Presentation
 from pptx.chart.data import ChartData
 from pptx.enum.chart import XL_CHART_TYPE
+from pptx.oxml.ns import qn
 from pptx.oxml.shapes.graphfrm import CT_GraphicalObjectFrame
 from pptx.oxml.shapes.picture import CT_Picture
+from pptx.oxml.xmlchemy import OxmlElement
 from pptx.shapes.placeholder import PlaceholderGraphicFrame, PlaceholderPicture
 from pptx.util import Emu, Pt
 
@@ -51,6 +53,15 @@ _MARKDOWN_HEADING_SPACE_BEFORE_PT = 6.0
 _MARKDOWN_BODY_SPACE_AFTER_PT = 6.0
 _MARKDOWN_LIST_SPACE_AFTER_PT = 2.0
 _MARKDOWN_BLOCK_SPACE_BEFORE_PT = 6.0
+_PPTX_NS = {
+    "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+    "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
+}
+_TEXT_STYLE_TAGS = {
+    "title": "titleStyle",
+    "body": "bodyStyle",
+    "other": "otherStyle",
+}
 
 
 def plan_output_change(output_path: Path, *, overwrite: bool) -> dict[str, str]:
@@ -197,6 +208,7 @@ def _populate_slide(slide: Any, layout: LayoutContract, content: dict[str, Any])
             f"Missing required placeholders for layout {layout.id}: {', '.join(missing_required)}",
         )
 
+    filled_placeholder_idxs: set[int] = set()
     for key, value in content.items():
         placeholder = expected[key]
         shape = _find_slide_placeholder(slide, placeholder.placeholder_idx)
@@ -206,6 +218,9 @@ def _populate_slide(slide: Any, layout: LayoutContract, content: dict[str, Any])
                 f"Placeholder {key} was not found on generated slide",
             )
         _apply_content_value(shape, placeholder.supported_content_types, value)
+        filled_placeholder_idxs.add(placeholder.placeholder_idx)
+
+    _cleanup_unused_placeholders(slide, layout, filled_placeholder_idxs)
 
 
 def _find_slide_placeholder(slide: Any, placeholder_idx: int) -> Any | None:
@@ -256,18 +271,149 @@ def _normalize_content_value(value: Any) -> dict[str, Any]:
 
 def _apply_text(shape: Any, text: str, *, markdown: bool) -> None:
     text_frame = shape.text_frame
+    text_frame_state = _capture_text_frame_state(shape)
     text_frame.clear()
+    _restore_text_frame_state(text_frame, text_frame_state)
     paragraphs = parse_markdown_paragraphs(text) if markdown else parse_plain_text_paragraphs(text)
+    list_level_offset = _first_markdown_list_level(shape) if markdown else 0
 
     previous: ParsedParagraph | None = None
     for index, parsed in enumerate(paragraphs):
         paragraph = text_frame.paragraphs[0] if index == 0 else text_frame.add_paragraph()
-        if parsed.level is not None:
-            paragraph.level = parsed.level
+        _apply_markdown_list_level(paragraph, parsed, list_level_offset)
         _write_paragraph_runs(paragraph, parsed)
         if markdown:
             _apply_markdown_paragraph_format(paragraph, parsed, previous, is_first=index == 0)
         previous = parsed
+
+
+def _capture_text_frame_state(shape: Any) -> dict[str, Any]:
+    text_frame = shape.text_frame
+    return {
+        "vertical_anchor": _resolve_text_frame_value(shape, "vertical_anchor"),
+        "word_wrap": _resolve_text_frame_value(shape, "word_wrap"),
+        "auto_size": _resolve_text_frame_value(shape, "auto_size"),
+        "margin_top": text_frame.margin_top,
+        "margin_bottom": text_frame.margin_bottom,
+        "margin_left": text_frame.margin_left,
+        "margin_right": text_frame.margin_right,
+    }
+
+
+def _restore_text_frame_state(text_frame: Any, state: dict[str, Any]) -> None:
+    text_frame.vertical_anchor = state["vertical_anchor"]
+    text_frame.word_wrap = state["word_wrap"]
+    text_frame.auto_size = state["auto_size"]
+    text_frame.margin_top = state["margin_top"]
+    text_frame.margin_bottom = state["margin_bottom"]
+    text_frame.margin_left = state["margin_left"]
+    text_frame.margin_right = state["margin_right"]
+
+
+def _resolve_text_frame_value(shape: Any, attribute_name: str) -> Any:
+    value = getattr(shape.text_frame, attribute_name)
+    if value is not None:
+        return value
+
+    layout_placeholder = _find_layout_placeholder(shape)
+    if layout_placeholder is None or not hasattr(layout_placeholder, "text_frame"):
+        return value
+    return getattr(layout_placeholder.text_frame, attribute_name)
+
+
+def _find_layout_placeholder(shape: Any) -> Any | None:
+    if not getattr(shape, "is_placeholder", False):
+        return None
+
+    placeholder_idx = int(shape.placeholder_format.idx)
+    for layout_shape in shape.part.slide_layout.placeholders:
+        if int(layout_shape.placeholder_format.idx) == placeholder_idx:
+            return layout_shape
+    return None
+
+
+def _apply_markdown_list_level(
+    paragraph: Any,
+    parsed: ParsedParagraph,
+    list_level_offset: int,
+) -> None:
+    if parsed.kind not in {"bullet", "ordered"} or parsed.level is None:
+        return
+
+    paragraph.level = min(list_level_offset + parsed.level, 8)
+    _set_paragraph_bullet_mode(paragraph, enabled=parsed.kind == "bullet")
+
+
+def _set_paragraph_bullet_mode(paragraph: Any, *, enabled: bool) -> None:
+    paragraph_properties = _paragraph_properties(paragraph)
+    for tag_name in ("a:buNone", "a:buChar", "a:buAutoNum"):
+        child = paragraph_properties.find(qn(tag_name))
+        if child is not None:
+            paragraph_properties.remove(child)
+    if not enabled:
+        paragraph_properties.insert(0, OxmlElement("a:buNone"))
+
+
+def _paragraph_properties(paragraph: Any) -> Any:
+    paragraph_properties = paragraph._element.find(qn("a:pPr"))
+    if paragraph_properties is not None:
+        return paragraph_properties
+
+    paragraph_properties = OxmlElement("a:pPr")
+    paragraph._element.insert(0, paragraph_properties)
+    return paragraph_properties
+
+
+def _first_markdown_list_level(shape: Any) -> int:
+    style_root = _text_style_root(shape)
+    if style_root is None:
+        return 0
+
+    for level in range(0, 5):
+        if _paragraph_style_has_bullet(_paragraph_style_for_level(style_root, level)):
+            return level
+    return 0
+
+
+def _text_style_root(shape: Any) -> Any | None:
+    tag_name = _TEXT_STYLE_TAGS[_placeholder_text_style_bucket(shape)]
+    return shape.part.slide_layout.slide_master.element.find(
+        f".//p:{tag_name}",
+        namespaces=_PPTX_NS,
+    )
+
+
+def _placeholder_text_style_bucket(shape: Any) -> str:
+    if not getattr(shape, "is_placeholder", False):
+        return "body"
+
+    placeholder_type = shape.placeholder_format.type.name.lower()
+    if placeholder_type in {"title", "center_title", "vertical_title"}:
+        return "title"
+    if placeholder_type in {"body", "object", "content", "text", "subtitle"}:
+        return "body"
+    return "other"
+
+
+def _paragraph_style_for_level(style_root: Any, level: int) -> Any | None:
+    if level == 0:
+        paragraph_style = style_root.find("./a:lvl1pPr", namespaces=_PPTX_NS)
+        if paragraph_style is not None:
+            return paragraph_style
+        return style_root.find("./a:defPPr", namespaces=_PPTX_NS)
+
+    return style_root.find(f"./a:lvl{level + 1}pPr", namespaces=_PPTX_NS)
+
+
+def _paragraph_style_has_bullet(paragraph_style: Any | None) -> bool:
+    if paragraph_style is None:
+        return False
+    if paragraph_style.find(qn("a:buNone")) is not None:
+        return False
+    return (
+        paragraph_style.find(qn("a:buChar")) is not None
+        or paragraph_style.find(qn("a:buAutoNum")) is not None
+    )
 
 
 def _write_paragraph_runs(paragraph: Any, parsed: ParsedParagraph) -> None:
@@ -330,6 +476,26 @@ def _starts_new_markdown_block(
     if current.kind in {"bullet", "ordered"}:
         return previous.kind != current.kind
     return previous.kind in {"bullet", "ordered"}
+
+
+def _cleanup_unused_placeholders(
+    slide: Any,
+    layout: LayoutContract,
+    filled_placeholder_idxs: set[int],
+) -> None:
+    expected_by_idx = {
+        placeholder.placeholder_idx: placeholder for placeholder in layout.placeholders
+    }
+    for shape in list(slide.placeholders):
+        placeholder_idx = int(shape.placeholder_format.idx)
+        placeholder = expected_by_idx.get(placeholder_idx)
+        if placeholder is None:
+            continue
+        if placeholder_idx in filled_placeholder_idxs:
+            continue
+        if placeholder.required:
+            continue
+        shape._element.getparent().remove(shape._element)
 
 
 def _apply_image(shape: Any, content: dict[str, Any]) -> None:
@@ -433,7 +599,7 @@ def _insert_placeholder_picture(
         image_part.desc,
         relationship_id,
     )
-    shape._replace_placeholder_with(picture_element)
+    _replace_placeholder_with_preserved_order(shape, picture_element)
     return PlaceholderPicture(picture_element, shape._parent), image_size
 
 
@@ -448,7 +614,7 @@ def _insert_placeholder_table(shape: Any, rows: int, cols: int) -> PlaceholderGr
         shape.width,
         Emu(rows * 370840),
     )
-    shape._replace_placeholder_with(graphic_frame)
+    _replace_placeholder_with_preserved_order(shape, graphic_frame)
     return PlaceholderGraphicFrame(graphic_frame, shape._parent)
 
 
@@ -467,8 +633,19 @@ def _insert_placeholder_chart(
         shape.width,
         shape.height,
     )
-    shape._replace_placeholder_with(graphic_frame)
+    _replace_placeholder_with_preserved_order(shape, graphic_frame)
     return PlaceholderGraphicFrame(graphic_frame, shape._parent)
+
+
+def _replace_placeholder_with_preserved_order(shape: Any, replacement: Any) -> None:
+    shape_tree = shape._element.getparent()
+    original_index = list(shape_tree).index(shape._element)
+    shape._replace_placeholder_with(replacement)
+    current_index = list(shape_tree).index(replacement)
+    if current_index == original_index:
+        return
+    shape_tree.remove(replacement)
+    shape_tree.insert(original_index, replacement)
 
 
 def _apply_image_crop(
