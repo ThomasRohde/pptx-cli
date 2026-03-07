@@ -492,8 +492,9 @@ uv run python scripts/bump_version.py major
 ```
 
 Pushing a version change to `main` or `master` triggers the publish workflow
-automatically. The helper also creates a matching annotated `v*` tag for release
-bookkeeping. Use `--no-push` to keep the version bump and tag local.
+automatically. The helper only bumps the version, commits it, and pushes. The
+publish workflow creates the matching release/tag on GitHub. Use `--no-push` to
+keep the version bump local.
 
 This updates the package version used for builds and PyPI publishing without needing to edit multiple files manually.
 

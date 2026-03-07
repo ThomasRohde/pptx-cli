@@ -9,7 +9,7 @@ from pptx_cli.core.versioning import read_version_from_init, write_version_to_in
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Bump the project semantic version, commit, tag, and push.",
+        description="Bump the project semantic version, commit it, and optionally push.",
     )
     parser.add_argument(
         "part",
@@ -19,7 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-push",
         action="store_true",
-        help="Commit and tag locally but do not push.",
+        help="Commit locally but do not push.",
     )
     return parser
 
@@ -39,21 +39,16 @@ def main() -> None:
     updated = current.bump(args.part)
     write_version_to_init(init_file, updated)
 
-    tag = f"v{updated}"
     print(f"{current} -> {updated}")
 
     _run(["git", "add", str(init_file)], cwd=repo_root)
     _run(["git", "commit", "-m", f"chore: bump version to {updated}"], cwd=repo_root)
-    _run(["git", "tag", "-a", tag, "-m", f"Release {updated}"], cwd=repo_root)
 
     if not args.no_push:
-        _run(["git", "push", "--follow-tags"], cwd=repo_root)
-        print(
-            f"Pushed {tag}. The publish workflow runs automatically when the version "
-            "change reaches main/master."
-        )
+        _run(["git", "push"], cwd=repo_root)
+        print(f"Pushed {updated}. The publish workflow runs automatically on main/master.")
     else:
-        print(f"Tagged {tag} locally. Push with: git push --follow-tags")
+        print("Committed locally. Push with: git push")
 
 
 if __name__ == "__main__":
