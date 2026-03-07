@@ -380,6 +380,69 @@ def test_deck_build_supports_structured_image_table_and_chart_content(
     assert chart_shape.has_chart is True
 
 
+def test_deck_build_auto_detects_markdown_bullets_and_preserves_text_opt_out(
+    template_path: Path,
+    manifest_dir: Path,
+    tmp_path: Path,
+) -> None:
+    deck_spec = tmp_path / "bullets.yaml"
+    out_file = tmp_path / "bullets.pptx"
+    _init_manifest(template_path, manifest_dir)
+
+    deck_spec.write_text(
+        yaml.safe_dump(
+            {
+                "slides": [
+                    {
+                        "layout": "1-title-and-content",
+                        "content": {
+                            "title": "Bullets",
+                            "content_1": "- First point\n  - Nested point\nPlain paragraph",
+                        },
+                    },
+                    {
+                        "layout": "1-title-and-content",
+                        "content": {
+                            "title": "Literal dash",
+                            "content_1": {"kind": "text", "value": "- literal dash"},
+                        },
+                    },
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    payload = _invoke_json(
+        [
+            "deck",
+            "build",
+            "--manifest",
+            str(manifest_dir),
+            "--spec",
+            str(deck_spec),
+            "--out",
+            str(out_file),
+        ]
+    )
+
+    assert payload["result"]["summary"]["slides"] == 2
+
+    generated = Presentation(str(out_file))
+    bullet_shape = _placeholder_by_idx(generated.slides[0], 1)
+    paragraphs = bullet_shape.text_frame.paragraphs
+    assert [paragraph.text for paragraph in paragraphs] == [
+        "First point",
+        "Nested point",
+        "Plain paragraph",
+    ]
+    assert paragraphs[1].level == 1
+
+    literal_shape = _placeholder_by_idx(generated.slides[1], 1)
+    assert literal_shape.text_frame.paragraphs[0].text == "- literal dash"
+
+
 def test_annotations_can_override_supported_content_types(
     template_path: Path,
     manifest_dir: Path,

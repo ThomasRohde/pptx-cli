@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,12 @@ _IMAGE_FIT_ALIASES = {
     "fill": "cover",
     "fit": "fit",
 }
+
+
+@dataclass(frozen=True)
+class ParsedParagraph:
+    text: str
+    level: int | None
 
 
 def plan_output_change(output_path: Path, *, overwrite: bool) -> dict[str, str]:
@@ -227,6 +234,8 @@ def _normalize_content_value(value: Any) -> dict[str, Any]:
     if isinstance(value, dict) and "kind" in value:
         return value
     if isinstance(value, str):
+        if _looks_like_markdown(value):
+            return {"kind": "markdown-text", "value": value}
         return {"kind": "text", "value": value}
     if isinstance(value, (int, float, bool)):
         return {"kind": "text", "value": str(value)}
@@ -236,26 +245,63 @@ def _normalize_content_value(value: Any) -> dict[str, Any]:
 
 
 def _apply_text(shape: Any, text: str, *, markdown: bool) -> None:
-    value = _markdown_to_text(text) if markdown else text
     text_frame = shape.text_frame
     text_frame.clear()
-    lines = value.splitlines() or [""]
-    first_paragraph = text_frame.paragraphs[0]
-    first_paragraph.text = lines[0]
-    for line in lines[1:]:
-        paragraph = text_frame.add_paragraph()
-        paragraph.text = line
+    paragraphs = (
+        _parse_markdown_paragraphs(text) if markdown else _parse_plain_text_paragraphs(text)
+    )
+
+    for index, parsed in enumerate(paragraphs):
+        paragraph = text_frame.paragraphs[0] if index == 0 else text_frame.add_paragraph()
+        paragraph.text = parsed.text
+        if parsed.level is not None:
+            paragraph.level = parsed.level
 
 
-def _markdown_to_text(markdown: str) -> str:
-    cleaned_lines: list[str] = []
+def _looks_like_markdown(text: str) -> bool:
+    if "\n" not in text and "\r" not in text:
+        return False
+    for raw_line in text.splitlines():
+        stripped = raw_line.lstrip()
+        if not stripped:
+            continue
+        if stripped.startswith(("- ", "* ", "# ", "## ", "### ", "> ")):
+            return True
+    return False
+
+
+def _parse_plain_text_paragraphs(text: str) -> list[ParsedParagraph]:
+    return [ParsedParagraph(text=line, level=None) for line in (text.splitlines() or [""])]
+
+
+def _parse_markdown_paragraphs(markdown: str) -> list[ParsedParagraph]:
+    paragraphs: list[ParsedParagraph] = []
     for raw_line in markdown.splitlines():
-        line = raw_line.strip()
-        for prefix in ("# ", "## ", "### ", "- ", "* ", "> "):
-            if line.startswith(prefix):
-                line = line[len(prefix) :]
-        cleaned_lines.append(line.replace("**", "").replace("__", "").replace("`", ""))
-    return "\n".join(cleaned_lines).strip()
+        expanded_line = raw_line.expandtabs(2).rstrip()
+        stripped = expanded_line.lstrip()
+        indent = len(expanded_line) - len(stripped)
+
+        text = stripped
+        level: int | None = None
+        for bullet_prefix in ("- ", "* "):
+            if stripped.startswith(bullet_prefix):
+                text = stripped[len(bullet_prefix) :]
+                level = min(indent // 2, 4)
+                break
+
+        if level is None:
+            for prefix in ("### ", "## ", "# ", "> "):
+                if text.startswith(prefix):
+                    text = text[len(prefix) :]
+                    break
+
+        paragraphs.append(ParsedParagraph(text=_strip_inline_markdown(text), level=level))
+
+    return paragraphs or [ParsedParagraph(text="", level=None)]
+
+
+def _strip_inline_markdown(text: str) -> str:
+    return text.replace("**", "").replace("__", "").replace("`", "")
 
 
 def _apply_image(shape: Any, content: dict[str, Any]) -> None:
