@@ -51,6 +51,34 @@ For consulting-style decks, write a **ghost deck** first — a title-only
 outline where each slide title states the takeaway (not the topic). The titles
 alone should tell a coherent story. See `references/mckinsey-style.md`.
 
+### Working from a YAML input file
+
+When the user provides a YAML (or similar structured) file that already
+contains slide content, treat it as the authoritative source. The file
+typically defines `slides:` with per-slide fields such as `title`, `body`,
+`notes`, `table`, `chart`, and `image`.
+
+**Carry over every field.** Walk through each slide in the input and map
+every field into the deck spec. The most common mistake is silently dropping
+fields that do not map to a placeholder — especially `notes`. Always include:
+
+- `title` and `body` → map to the layout's `title` and `content_1`
+- `notes` → map to the slide-level `notes:` key in the deck spec
+- `table` → map to a `{ kind: table, ... }` content block
+- `chart` → map to a `{ kind: chart, ... }` content block
+- `image` → map to a `{ kind: image, ... }` content block
+
+**Do not summarize, rewrite, or omit content** unless the user explicitly
+asks for editing. The goal is faithful conversion from the input format to
+a template-bound deck spec, not reinterpretation.
+
+**Checklist before building:** after writing the deck spec, verify that:
+
+1. The number of slides matches the input.
+2. Every `notes:` block from the input appears in the spec.
+3. Every table, chart, and image from the input is present.
+4. Source attributions are preserved.
+
 ### Step 1 — Initialize the manifest (one-time setup)
 
 Check if a manifest package already exists. If not, initialize from the
