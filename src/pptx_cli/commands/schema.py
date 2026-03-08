@@ -99,7 +99,7 @@ slides:
   chart_type accepts: column_clustered, bar_clustered, line, pie.
   image_fit accepts: "fit" (default) or "cover".
 - "notes" is optional speaker-notes text (markdown ok).
-- Do NOT include a "layout" key – layout is assigned later when
+- Do NOT include a "layout" key - layout is assigned later when
   binding to a corporate template.
 </content-rules>
 
@@ -116,7 +116,7 @@ Titles
 - Use action titles, not topic labels.  The title states the takeaway.
   Bad:  "Market overview"
   Good: "Nordic retail banking margins will remain under pressure through 2027"
-- Title storyline reads on its own – skim only titles and understand the
+- Title storyline reads on its own - skim only titles and understand the
   full argument.
 - Formulas:
     Insight:        "[What happened] because [driver]"
@@ -144,7 +144,7 @@ Body content
 - Every claim backed by evidence.  The body proves the headline.
 - Quantify.  Replace vague adjectives with measured claims.
 - Keep text tight: verbs, short bullets, no filler.
-- Move backup detail to appendix – main story stays focused.
+- Move backup detail to appendix - main story stays focused.
 </style-guide>
 """
 
