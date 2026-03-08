@@ -76,6 +76,16 @@ pptx --version
 pptx guide --format json
 ```
 
+### AI coding agent skill
+
+If you use an AI coding agent such as Claude Code, Codex, or Copilot, you can install the `pptx-deck-builder` skill to give your agent the ability to build PowerPoint decks using `pptx`:
+
+```bash
+npx skills add ThomasRohde/pptx-cli --skill pptx-deck-builder
+```
+
+This installs the skill directly from the repository — no need to clone it.
+
 ## Quick start
 
 The examples below assume you have a local PowerPoint template file available,
