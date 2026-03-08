@@ -20,6 +20,7 @@ from pptx_cli.commands.inspect import (
     show_theme,
 )
 from pptx_cli.commands.manifest_ops import manifest_diff, manifest_schema
+from pptx_cli.commands.schema import build_schema_document, copy_to_clipboard
 from pptx_cli.commands.validate import validate_command
 from pptx_cli.commands.wrapper import wrapper_generate
 from pptx_cli.core.composition import CompositionError
@@ -236,6 +237,27 @@ def guide(format: FormatOption = None) -> None:
     """Show the machine-readable CLI guide."""
 
     execute("guide.show", format, lambda: build_guide_document().model_dump(mode="json"))
+
+
+@app.command("schema")
+def schema_command(
+    template: Annotated[
+        Path | None,
+        typer.Option("--template", help="Path to a manifest package directory."),
+    ] = None,
+    no_copy: Annotated[
+        bool,
+        typer.Option("--no-copy", help="Skip copying output to the clipboard."),
+    ] = False,
+) -> None:
+    """Print the deck-spec YAML reference (for pasting into LLM prompts)."""
+    text = build_schema_document(template)
+    typer.echo(text)
+    if not no_copy:
+        if copy_to_clipboard(text):
+            typer.echo("(copied to clipboard)", err=True)
+        else:
+            typer.echo("(clipboard copy failed – install xclip or pipe manually)", err=True)
 
 
 @app.command("init")

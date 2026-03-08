@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run pyright src/pptx_cli/commands/schema.py tests/test_schema.py)"
+    ]
+  }
+}

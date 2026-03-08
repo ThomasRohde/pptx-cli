@@ -18,6 +18,16 @@ def build_guide_document() -> GuideDocument:
                 examples=["pptx guide --format json"],
             ),
             GuideCommand(
+                id="schema.show",
+                summary="Print the deck-spec YAML reference for pasting into LLM prompts",
+                mutates=False,
+                examples=[
+                    "pptx schema",
+                    "pptx schema --template ./corp-template",
+                    "pptx schema --no-copy",
+                ],
+            ),
+            GuideCommand(
                 id="template.init",
                 summary="Initialize a manifest package from a source template",
                 mutates=True,
