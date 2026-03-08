@@ -46,6 +46,18 @@ def copy_to_clipboard(text: str) -> bool:
 # ---------------------------------------------------------------------------
 
 _GENERIC_SCHEMA = """\
+<output-format>
+IMPORTANT: Your output MUST be a YAML deck spec, not a binary .pptx file.
+Do NOT attempt to generate PowerPoint XML, base64 data, or any format
+other than the YAML shown below.  The `pptx deck build` CLI tool handles
+all PowerPoint rendering — you only provide the YAML.
+
+Preferred: offer the YAML as a downloadable file (e.g. a download link or
+file attachment named "deck.yaml") so the user can save it directly.
+Fallback: emit a single ```yaml code block the user can copy-paste into
+a .yaml file and then run `pptx deck build -f deck.yaml`.
+</output-format>
+
 <slide-schema>
 Use this schema to draft presentation content.  Layout assignment and
 template binding happen later, so focus on the slides themselves.
