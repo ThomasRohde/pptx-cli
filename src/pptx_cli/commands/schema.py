@@ -20,6 +20,7 @@ from pptx_cli.models.manifest import LayoutContract, ManifestDocument
 # Clipboard helper
 # ---------------------------------------------------------------------------
 
+
 def copy_to_clipboard(text: str) -> bool:
     """Copy *text* to the system clipboard.  Returns True on success."""
     if sys.platform == "win32":
@@ -152,6 +153,7 @@ Body content
 # Template-enriched schema
 # ---------------------------------------------------------------------------
 
+
 def _placeholder_summary(ph: Any) -> dict[str, Any]:
     """Compact summary of a placeholder contract."""
     entry: dict[str, Any] = {
@@ -213,6 +215,7 @@ def _build_template_section(manifest: ManifestDocument) -> str:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def build_schema_document(template_dir: Path | None = None) -> str:
     """Return the full reference document as a string."""
