@@ -248,6 +248,7 @@ pptx slide create \
   --set title="Enterprise AI Operating Model" \
   --set left_body=@left.md \
   --set right_body=@right.md \
+  --notes-file speaker-notes.md \
   --out slide.pptx
 ```
 
@@ -264,6 +265,7 @@ Composition rules:
 - only declared placeholders can be filled
 - content types must match placeholder types
 - v1 supported placeholder content types are text, images, tables, charts, and markdown-to-text mappings
+- speaker notes are optional per-slide metadata, not placeholder content types, and may use the same markdown-to-text formatting pipeline
 - v1 tables and charts preserve approved placeholder geometry and accept structured data population, but do not guarantee full preservation of advanced workbook internals or highly custom styling behaviors
 - static brand elements remain untouched unless explicitly marked overridable
 - theme and master dependencies must be preserved
@@ -377,6 +379,11 @@ The v1 supported placeholder content types shall include:
 - table
 - chart
 - markdown-to-text
+
+The system shall also support optional per-slide speaker notes supplied either
+through the structured deck spec or dedicated direct-command inputs. These notes
+are slide metadata rather than placeholders and reuse the markdown-to-text
+formatting pipeline for rich presenter text.
 
 ### FR-9: Validate output
 
@@ -669,6 +676,9 @@ slides:
   - layout: section-divider
     content:
       title: Why this change
+    notes: |
+      - Pause before the transition
+      - Re-anchor the audience on governance and brand fidelity
   - layout: executive-two-column
     content:
       title: Core idea
@@ -1132,6 +1142,7 @@ The following product decisions are now fixed for v1:
 12. Preview metadata uses a single canonical preview path field per layout.
 13. The CLI adopts an agent-first machine contract with a structured response envelope, stable error codes, exit-code mapping, and a built-in `guide` command.
 14. Mutating commands support `--dry-run` and structured change summaries.
+15. V1 supports optional per-slide speaker notes using text/markdown formatting, but notes are not part of the placeholder contract and are never required by default.
 
 ## 26. Recommendation
 

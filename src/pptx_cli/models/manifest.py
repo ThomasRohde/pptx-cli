@@ -162,6 +162,7 @@ class InitReport(BaseModel):
 class SlideSpec(BaseModel):
     layout: str
     content: dict[str, Any] = Field(default_factory=dict)
+    notes: str | None = None
 
 
 class DeckSpec(BaseModel):

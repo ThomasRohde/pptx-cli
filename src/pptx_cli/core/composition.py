@@ -118,8 +118,13 @@ def _load_inline_or_file_value(raw_value: str) -> Any:
     return raw_value
 
 
-def create_single_slide_spec(layout: str, content: dict[str, Any]) -> DeckSpec:
-    return DeckSpec(slides=[SlideSpec(layout=layout, content=content)])
+def create_single_slide_spec(
+    layout: str,
+    content: dict[str, Any],
+    *,
+    notes: str | None = None,
+) -> DeckSpec:
+    return DeckSpec(slides=[SlideSpec(layout=layout, content=content, notes=notes)])
 
 
 def build_presentation(manifest_dir: Path, manifest: ManifestDocument, spec: DeckSpec) -> Any:
@@ -137,6 +142,8 @@ def build_presentation(manifest_dir: Path, manifest: ManifestDocument, spec: Dec
             slide_layout = prs.slide_layouts[layout_contract.source_layout_index]
             slide = prs.slides.add_slide(slide_layout)
             _populate_slide(slide, layout_contract, slide_spec.content)
+            if slide_spec.notes is not None:
+                _apply_slide_notes(slide, slide_spec.notes)
         except CompositionError as exc:
             raise CompositionError(
                 exc.code,
@@ -301,6 +308,37 @@ def _apply_text(shape: Any, text: str, *, markdown: bool) -> None:
     _restore_text_frame_state(text_frame, text_frame_state)
     paragraphs = parse_markdown_paragraphs(text) if markdown else parse_plain_text_paragraphs(text)
     list_level_offset = _first_markdown_list_level(shape) if markdown else 0
+
+    _write_text_frame_paragraphs(
+        text_frame,
+        paragraphs,
+        markdown=markdown,
+        list_level_offset=list_level_offset,
+    )
+
+
+def _apply_slide_notes(slide: Any, text: str) -> None:
+    notes_slide = slide.notes_slide
+    text_frame = notes_slide.notes_text_frame
+    text_frame.clear()
+    markdown = looks_like_markdown(text)
+    paragraphs = parse_markdown_paragraphs(text) if markdown else parse_plain_text_paragraphs(text)
+
+    _write_text_frame_paragraphs(
+        text_frame,
+        paragraphs,
+        markdown=markdown,
+        list_level_offset=0,
+    )
+
+
+def _write_text_frame_paragraphs(
+    text_frame: Any,
+    paragraphs: list[ParsedParagraph],
+    *,
+    markdown: bool,
+    list_level_offset: int,
+) -> None:
 
     previous: ParsedParagraph | None = None
     for index, parsed in enumerate(paragraphs):

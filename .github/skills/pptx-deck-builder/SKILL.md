@@ -184,6 +184,11 @@ slides:
         - Bullet point one
         - Bullet point two
       source: "Source: Data attribution"
+    notes: |
+      # Speaker notes
+
+      - Open with the takeaway before reading the slide
+      - Keep timing to under 90 seconds
 
   - layout: picture-layout-id
     content:
@@ -202,6 +207,7 @@ slides:
 - `@notes.md` via `--set key=@notes.md` or `{ kind: "markdown-text", value:
   "..." }` → markdown parsed with headings, lists, inline emphasis, and light
   presentation-aware spacing
+- Slide-level speaker notes → `notes: |` in the deck spec, or `pptx slide create --notes/--notes-file` for single-slide generation
 - `{ kind: "image", path: "path/to/file.png" }` → image insertion
 - `{ kind: "table", columns: [...], rows: [[...], ...] }` → table
 - `{ kind: "chart", chart_type: "column_clustered", categories: [...], series: [{name: "...", values: [...]}] }` → chart
@@ -399,7 +405,7 @@ pptx theme show --manifest ./manifest-dir --format json
 pptx assets list --manifest ./manifest-dir --format json
 
 # Single slide (quick test)
-pptx slide create --manifest ./manifest-dir --layout <id> --set title="Hello" --set content_1=@notes.md --out slide.pptx
+pptx slide create --manifest ./manifest-dir --layout <id> --set title="Hello" --notes-file ./speaker-notes.md --out slide.pptx
 
 # Full deck
 pptx deck build --manifest ./manifest-dir --spec deck.yaml --out deck.pptx --format json

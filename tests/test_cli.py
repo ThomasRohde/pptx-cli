@@ -59,6 +59,11 @@ def test_guide_returns_structured_envelope_with_catalog() -> None:
     command_ids = {command["id"] for command in payload["result"]["commands"]}
     assert "layouts.list" in command_ids
     assert "deck.build" in command_ids
+    slide_create_command = next(
+        command for command in payload["result"]["commands"] if command["id"] == "slide.create"
+    )
+    slide_spec_properties = slide_create_command["input_schema"]["$defs"]["SlideSpec"]["properties"]
+    assert "notes" in slide_spec_properties
     assert payload["result"]["exit_codes"]["validation_error"] == 10
     assert "ERR_IO_NOT_FOUND" in payload["result"]["error_codes"]
     assert payload["result"]["content_objects"]["image"]["example"]["kind"] == "image"
@@ -257,6 +262,64 @@ def test_slide_create_and_validate_round_trip(
     assert title_shape.text_frame.vertical_anchor == template_title_shape.text_frame.vertical_anchor
 
 
+def test_slide_create_supports_speaker_notes_from_markdown_file(
+    template_path: Path,
+    manifest_dir: Path,
+    tmp_path: Path,
+) -> None:
+    out_file = tmp_path / "slide-with-notes.pptx"
+    notes_file = tmp_path / "speaker-notes.md"
+    notes_file.write_text(
+        "# Talking points\n\n- Lead with customer outcomes\n- Close on delivery confidence\n",
+        encoding="utf-8",
+    )
+    _init_manifest(template_path, manifest_dir)
+
+    payload = _invoke_json(
+        [
+            "slide",
+            "create",
+            "--manifest",
+            str(manifest_dir),
+            "--layout",
+            "title-only",
+            "--set",
+            "title=Quarterly Update",
+            "--notes-file",
+            str(notes_file),
+            "--out",
+            str(out_file),
+        ]
+    )
+
+    assert payload["result"]["summary"]["notes_slides"] == 1
+    assert any(change["target"] == "slide[1].notes" for change in payload["result"]["changes"])
+
+    generated = Presentation(str(out_file))
+    notes_frame = generated.slides[0].notes_slide.notes_text_frame
+    assert notes_frame is not None
+    paragraphs = notes_frame.paragraphs
+    assert [paragraph.text for paragraph in paragraphs] == [
+        "Talking points",
+        "Lead with customer outcomes",
+        "Close on delivery confidence",
+    ]
+    assert paragraphs[0].runs[0].font.bold is True
+    assert paragraphs[1].level == 0
+    assert paragraphs[2].level == 0
+
+    validation = _invoke_json(
+        [
+            "validate",
+            "--manifest",
+            str(manifest_dir),
+            "--deck",
+            str(out_file),
+        ]
+    )
+    assert validation["result"]["ok"] is True
+
+
 def test_slide_create_picture_placeholder_uses_fit_by_default(
     template_path: Path,
     manifest_dir: Path,
@@ -407,6 +470,119 @@ def test_deck_build_supports_structured_image_table_and_chart_content(
     assert table_shape.has_table is True
     chart_shape = _placeholder_by_idx(generated.slides[2], 1)
     assert chart_shape.has_chart is True
+
+
+def test_deck_build_supports_speaker_notes_and_reports_them_in_dry_run(
+    template_path: Path,
+    manifest_dir: Path,
+    tmp_path: Path,
+) -> None:
+    deck_spec = tmp_path / "speaker-notes-deck.yaml"
+    out_file = tmp_path / "speaker-notes-deck.pptx"
+    _init_manifest(template_path, manifest_dir)
+
+    deck_spec.write_text(
+        yaml.safe_dump(
+            {
+                "slides": [
+                    {
+                        "layout": "title-only",
+                        "content": {"title": "Opening"},
+                    },
+                    {
+                        "layout": "1-title-and-content",
+                        "content": {
+                            "title": "Operating model",
+                            "content_1": "Preserve the template contract.",
+                        },
+                        "notes": "Lead with the governance angle.\n\n- Mention change control",
+                    },
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    dry_run_payload = _invoke_json(
+        [
+            "deck",
+            "build",
+            "--manifest",
+            str(manifest_dir),
+            "--spec",
+            str(deck_spec),
+            "--out",
+            str(out_file),
+            "--dry-run",
+        ]
+    )
+
+    assert dry_run_payload["result"]["summary"]["notes_slides"] == 1
+    assert any(
+        change["target"] == "slide[2].notes" and change["artifact_type"] == "speaker-notes"
+        for change in dry_run_payload["result"]["changes"]
+    )
+    assert out_file.exists() is False
+
+    build_payload = _invoke_json(
+        [
+            "deck",
+            "build",
+            "--manifest",
+            str(manifest_dir),
+            "--spec",
+            str(deck_spec),
+            "--out",
+            str(out_file),
+        ]
+    )
+
+    assert build_payload["result"]["summary"]["notes_slides"] == 1
+    generated = Presentation(str(out_file))
+    notes_frame = generated.slides[1].notes_slide.notes_text_frame
+    assert notes_frame is not None
+    assert [paragraph.text for paragraph in notes_frame.paragraphs] == [
+        "Lead with the governance angle.",
+        "Mention change control",
+    ]
+
+
+def test_slide_create_rejects_conflicting_speaker_notes_inputs(
+    template_path: Path,
+    manifest_dir: Path,
+    tmp_path: Path,
+) -> None:
+    out_file = tmp_path / "slide-conflicting-notes.pptx"
+    notes_file = tmp_path / "speaker-notes.txt"
+    notes_file.write_text("Use one notes input only.", encoding="utf-8")
+    _init_manifest(template_path, manifest_dir)
+
+    result = runner.invoke(
+        app,
+        [
+            "slide",
+            "create",
+            "--manifest",
+            str(manifest_dir),
+            "--layout",
+            "title-only",
+            "--set",
+            "title=Quarterly Update",
+            "--notes",
+            "Inline notes",
+            "--notes-file",
+            str(notes_file),
+            "--out",
+            str(out_file),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 10
+    payload = json.loads(result.stdout)
+    assert payload["errors"][0]["code"] == "ERR_VALIDATION_INPUT"
 
 
 def test_deck_build_auto_detects_markdown_bullets_and_preserves_text_opt_out(

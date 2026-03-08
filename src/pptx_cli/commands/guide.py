@@ -64,12 +64,15 @@ def build_guide_document() -> GuideDocument:
             ),
             GuideCommand(
                 id="slide.create",
-                summary="Create a slide from an approved layout",
+                summary="Create a slide from an approved layout with optional speaker notes",
                 mutates=True,
                 input_schema=DeckSpec.model_json_schema(),
                 examples=[
                     "pptx slide create --manifest ./corp-template --layout title-only "
                     "--set title=Hello --out ./out/slide.pptx --dry-run",
+                    "pptx slide create --manifest ./corp-template --layout title-only "
+                    "--set title=Hello --notes-file ./speaker-notes.md "
+                    "--out ./out/slide-with-notes.pptx",
                     "pptx slide create --manifest ./corp-template "
                     "--layout 3-front-page-title-and-picture "
                     "--set title=Workflow --set picture=@out/workflow.png "
@@ -78,7 +81,7 @@ def build_guide_document() -> GuideDocument:
             ),
             GuideCommand(
                 id="deck.build",
-                summary="Build a deck from a structured spec",
+                summary="Build a deck from a structured spec with optional per-slide speaker notes",
                 mutates=True,
                 input_schema=DeckSpec.model_json_schema(),
                 examples=[
@@ -150,6 +153,9 @@ def build_guide_document() -> GuideDocument:
             ),
             "placeholder_keys": (
                 "logical placeholder keys such as title, subtitle, content_1, or picture"
+            ),
+            "slide_notes": (
+                "optional per-slide speaker notes via SlideSpec.notes or slide create --notes"
             ),
             "manifest_path": "path to a manifest package directory containing manifest.yaml",
         },

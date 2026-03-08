@@ -108,6 +108,7 @@ pptx slide create \
   --layout title-only \
   --set title="Enterprise AI Operating Model" \
   --set subtitle="March 2026" \
+  --notes-file ./speaker-notes.md \
   --out ./out/operating-model-slide.pptx
 ```
 
@@ -162,6 +163,11 @@ slides:
     content:
       title: Enterprise AI Operating Model
       subtitle: March 2026
+    notes: |
+      # Opening talk track
+
+      - Lead with why preserving the template matters
+      - Call out that validation stays available for CI
   - layout: 1-breaker-with-pattern
     content:
       title: Why this change
@@ -234,12 +240,21 @@ corp-template/
 - chart
 - markdown-text
 
+Speaker notes are also supported in v1 as optional slide-level metadata via
+`slides[].notes` in deck specs or `pptx slide create --notes/--notes-file`.
+They are not placeholder content types and do not change layout placeholder
+contracts.
+
 `markdown-text` is parsed with `markdown-it-py` and currently maps CommonMark blocks into
 PowerPoint paragraphs. Headings become plain paragraphs, bullet lists use native PowerPoint
 bullet levels, ordered lists render as numbered paragraph text, and basic inline emphasis such
 as bold/italic/code spans is preserved where PowerPoint run formatting can express it. Markdown
 blocks also receive light presentation-aware spacing so headings, paragraphs, and lists do not
 collapse into a dense wall of text.
+
+The same markdown-to-text parsing pipeline is used for speaker notes, so headings,
+bullets, ordered lists, and basic inline emphasis remain available in presenter
+notes without introducing a separate formatting model.
 
 ## Structured content objects
 

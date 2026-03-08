@@ -154,6 +154,10 @@ pptx validate --manifest ./.pptx --deck ./out/deck.pptx --strict --format json
 - `chart` — chart data
 - `markdown-to-text` — markdown converted to formatted text
 
+Speaker notes are supported separately from placeholder content types. Use a
+slide-level `notes` field in deck specs, or `pptx slide create --notes` / `--notes-file`
+for single-slide generation.
+
 ## Error handling
 
 All commands return a structured JSON envelope with `ok`, `errors`, and `warnings` fields. Key exit codes:

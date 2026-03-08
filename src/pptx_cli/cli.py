@@ -30,8 +30,8 @@ from pptx_cli.models.envelope import CliMessage, Envelope, Metrics
 app = typer.Typer(
     help=(
         "Template-bound PowerPoint generation for enterprise decks. Supports text, "
-        "images, tables, charts, and markdown-text content in template-approved "
-        "placeholders."
+        "images, tables, charts, markdown-text content in template-approved "
+        "placeholders, and optional per-slide speaker notes."
     ),
     no_args_is_help=True,
 )
@@ -41,7 +41,10 @@ theme_app = typer.Typer(help="Inspect extracted theme metadata.")
 assets_app = typer.Typer(help="Inspect extracted asset references.")
 slide_app = typer.Typer(help="Create slides from approved layouts.")
 deck_app = typer.Typer(
-    help="Build full decks from structured specs, including markdown-text content."
+    help=(
+        "Build full decks from structured specs, including markdown-text content "
+        "and optional per-slide speaker notes."
+    )
 )
 manifest_app = typer.Typer(help="Work with manifest packages and schemas.")
 wrapper_app = typer.Typer(help="Generate thin template-specific wrapper CLIs.")
@@ -338,6 +341,20 @@ def slide_create_command(
             ),
         ),
     ] = None,
+    notes: Annotated[
+        str | None,
+        typer.Option(
+            "--notes",
+            help="Speaker notes text for the slide. Markdown-looking multiline text is supported.",
+        ),
+    ] = None,
+    notes_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--notes-file",
+            help="Path to a UTF-8 text or markdown file to use as speaker notes.",
+        ),
+    ] = None,
     dry_run: DryRunOption = False,
     overwrite: OverwriteOption = False,
     format: FormatOption = None,
@@ -346,6 +363,7 @@ def slide_create_command(
 
     Use --set key=@notes.md or a multiline markdown-looking value to populate
     markdown-text placeholders with headings, lists, and inline emphasis.
+    Use --notes or --notes-file for slide-level speaker notes.
     """
 
     execute(
@@ -356,6 +374,8 @@ def slide_create_command(
             layout,
             list(set_values or []),
             out,
+            notes=notes,
+            notes_file=notes_file,
             dry_run=dry_run,
             overwrite=overwrite,
         ),
@@ -383,7 +403,8 @@ def deck_build_command(
     """Build a deck from a structured spec.
 
     Deck specs can provide markdown-text content explicitly or rely on multiline
-    markdown-looking strings for headings, lists, and inline emphasis.
+    markdown-looking strings for headings, lists, and inline emphasis. Each slide
+    may also provide an optional `notes` field for speaker notes.
     """
 
     execute(
