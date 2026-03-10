@@ -245,13 +245,44 @@ def schema_command(
         Path | None,
         typer.Option("--template", help="Path to a manifest package directory."),
     ] = None,
+    no_template: Annotated[
+        bool,
+        typer.Option("--no-template", help="Emit generic schema without template layouts."),
+    ] = False,
     no_copy: Annotated[
         bool,
         typer.Option("--no-copy", help="Skip copying output to the clipboard."),
     ] = False,
 ) -> None:
     """Print the deck-spec YAML reference (for pasting into LLM prompts)."""
-    text = build_schema_document(template)
+    if template is not None and no_template:
+        typer.echo("Error: --template and --no-template are mutually exclusive.", err=True)
+        raise typer.Exit(code=1)
+
+    effective_template = template
+    if not no_template and effective_template is None:
+        # Auto-discover manifest in cwd
+        for candidate in [Path("manifest.yaml"), Path("manifest/manifest.yaml")]:
+            if candidate.exists():
+                effective_template = candidate.parent
+                break
+        if effective_template is None:
+            # Fall back to generic schema with a hint
+            typer.echo(
+                "Hint: use --template <dir> for a layout-aware schema, "
+                "or --no-template for the generic version.",
+                err=True,
+            )
+
+    if effective_template is not None and not (effective_template / "manifest.yaml").exists():
+        typer.echo(
+            f"Error: manifest not found at '{effective_template / 'manifest.yaml'}'.\n"
+            f"Run 'pptx init <template.pptx> --out {effective_template}' first.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    text = build_schema_document(effective_template)
     typer.echo(text)
     if not no_copy:
         if copy_to_clipboard(text):
